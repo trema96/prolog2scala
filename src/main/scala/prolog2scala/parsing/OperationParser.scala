@@ -3,7 +3,6 @@ package prolog2scala.parsing
 import fastparse._
 import PrologWhitespace._
 import prolog2scala.parsing.TermParser._
-import prolog2scala.parsing.ParsingRules._
 import prolog2scala.parsing.Term.Struct
 
 object OperationParser {
@@ -15,7 +14,7 @@ object OperationParser {
   private def sum[_: P]: P[Term] = P(mul ~ (StringIn("+","-").! ~ mul).rep) map opToTerm
   private def compare[_: P]: P[Term] = P(sum ~ (StringIn(">",">=","<","=<","is", "=").! ~ sum).rep) map opToTerm
 
-  private def opToTerm(args: (Term, Seq[(String, Term)])): Term = args match {
+  private def opToTerm: PartialFunction[(Term, Seq[(String, Term)]), Term] = {
     case (left, Nil) => left
     case (left, (op, right) :: t) => opToTerm(Struct(op, left, right), t)
   }
