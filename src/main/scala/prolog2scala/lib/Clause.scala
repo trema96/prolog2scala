@@ -17,16 +17,13 @@ object Clause {
     case class CutSolution[+A](override val solutionsLazyList: LazyList[A]) extends Solution[A]
   }
 
-  private class Rule[-A,+B](body: PartialFunction[A, Solution[B]]) extends Clause[A,B] {
+  class Rule[-A,+B] private (body: PartialFunction[A, Solution[B]]) extends Clause[A,B] {
     override def apply(arg: A): Solution[B] = body.applyOrElse(arg, (_: A) => SimpleSolution(LazyList()))
   }
 
   object Rule {
     def apply[A,B](body: PartialFunction[A, LazyList[B]]): Rule[A,B] = new Rule(body.andThen(SimpleSolution(_)))
-  }
-
-  object CutRule {
-    def apply[A,B](body: PartialFunction[A, Cut.CutResult[B]]): Rule[A,B] =
+    def withCut[A,B](body: PartialFunction[A, Cut.CutResult[B]]): Rule[A,B] =
       new Rule(body.andThen(res => if (res.didCut) CutSolution(res.solutions) else SimpleSolution(res.solutions)))
   }
 
