@@ -16,6 +16,6 @@ object OperationParser {
 
   private def opToTerm: PartialFunction[(Term, Seq[(String, Term)]), Term] = {
     case (left, Nil) => left
-    case (left, (op, right) :: t) => opToTerm(Struct(op, left, right), t)
+    case (left, (op, right) :: t) => opToTerm(Struct(op, Seq(left, right)), t)
   }
 }

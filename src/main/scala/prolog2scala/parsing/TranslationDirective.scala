@@ -2,9 +2,13 @@ package prolog2scala.parsing
 
 case class TranslationDirective(scalaName: String, predicateName: String, predicateArguments: Seq[PredicateArgument])
 
-sealed trait PredicateArgument
+case class PredicateArgument(name: String, predType: PredicateArgument.Type)
 
 object PredicateArgument {
-  case class In(name: String) extends PredicateArgument
-  case class Out(name: String) extends PredicateArgument
+  sealed trait Type
+  object Type {
+    case object In extends Type
+    case object Out extends Type
+  }
 }
+
