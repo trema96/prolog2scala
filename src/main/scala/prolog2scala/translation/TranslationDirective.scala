@@ -1,4 +1,4 @@
-package prolog2scala.parsing
+package prolog2scala.translation
 
 case class TranslationDirective(scalaName: String, predicateName: String, predicateArguments: Seq[PredicateArgument])
 

@@ -1,9 +1,10 @@
-package prolog2scala.parsing
+package prolog2scala.translation.parsing
 
 import fastparse._
-import StringParser._
-import TermParser._
-import PrologWhitespace._
+import prolog2scala.translation.parsing.PrologWhitespace._
+import prolog2scala.translation.parsing.StringParser._
+import prolog2scala.translation.parsing.TermParser._
+import prolog2scala.translation.{Clause, PredicateArgument, Program, TranslationDirective}
 
 object ParsingRules {
   def program[_: P]: P[Program] = P(Start ~ translationDirective.rep(1) ~ clause.rep(1) ~ End) map {

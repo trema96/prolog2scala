@@ -1,9 +1,10 @@
-package prolog2scala.parsing
+package prolog2scala.translation
 
 import fastparse._
 import org.scalatest.FlatSpec
-import prolog2scala.parsing.PredicateArgument.Type.{In, Out}
-import prolog2scala.parsing.Term.{ListTerm, Struct, Variable}
+import prolog2scala.translation.PredicateArgument.Type.{In, Out}
+import prolog2scala.translation.Term.{ListTerm, Struct, Variable}
+import prolog2scala.translation.parsing.ParsingRules
 
 class TestParsing extends FlatSpec {
   "A correct program" should "be correctly parsed" in {

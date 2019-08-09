@@ -1,10 +1,11 @@
-package prolog2scala.parsing
+package prolog2scala.translation.parsing
 
 import fastparse._
-import StringParser._
-import OperationParser._
-import PrologWhitespace._
-import prolog2scala.parsing.Term._
+import prolog2scala.translation.Term
+import prolog2scala.translation.Term._
+import prolog2scala.translation.parsing.OperationParser._
+import prolog2scala.translation.parsing.PrologWhitespace._
+import prolog2scala.translation.parsing.StringParser._
 
 object TermParser {
   def termList[_: P]: P[Seq[Term]] = P(term.rep(min = 1, sep = ","))

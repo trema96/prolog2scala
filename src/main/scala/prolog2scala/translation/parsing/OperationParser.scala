@@ -1,9 +1,10 @@
-package prolog2scala.parsing
+package prolog2scala.translation.parsing
 
 import fastparse._
-import PrologWhitespace._
-import prolog2scala.parsing.TermParser._
-import prolog2scala.parsing.Term.Struct
+import prolog2scala.translation.Term
+import prolog2scala.translation.Term.Struct
+import prolog2scala.translation.parsing.PrologWhitespace._
+import prolog2scala.translation.parsing.TermParser._
 
 object OperationParser {
   //TODO riprovare a generalizzare

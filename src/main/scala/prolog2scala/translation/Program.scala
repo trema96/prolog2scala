@@ -1,6 +1,6 @@
-package prolog2scala.parsing
+package prolog2scala.translation
 
-import prolog2scala.parsing.Term.{Cut, Struct, Variable}
+import prolog2scala.translation.Term.{Cut, Struct, Variable}
 
 case class Program(translationDirectives: Seq[TranslationDirective], predicates: Map[(String, Int), Seq[Clause]]) {
   def translate(): PredicateTranslationResult =

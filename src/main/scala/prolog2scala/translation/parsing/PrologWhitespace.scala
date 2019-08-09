@@ -1,4 +1,4 @@
-package prolog2scala.parsing
+package prolog2scala.translation.parsing
 
 import fastparse._
 

@@ -1,6 +1,6 @@
-package prolog2scala.parsing
+package prolog2scala.translation
 
-import prolog2scala.parsing.Term.Variable
+import prolog2scala.translation.Term.Variable
 
 sealed trait Term {
   def variables: Set[Variable]

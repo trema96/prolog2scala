@@ -1,7 +1,8 @@
-package prolog2scala.parsing
+package prolog2scala.translation
 
 import fastparse.{Parsed, parse}
 import org.scalatest.{FlatSpec, Matchers}
+import prolog2scala.translation.parsing.ParsingRules
 
 class TestTranslation extends FlatSpec with Matchers {
   "A correct program" should "correctly translate" in {

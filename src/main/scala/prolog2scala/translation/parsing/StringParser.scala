@@ -1,7 +1,7 @@
-package prolog2scala.parsing
+package prolog2scala.translation.parsing
 
 import fastparse._
-import PrologWhitespace._
+import prolog2scala.translation.parsing.PrologWhitespace._
 
 object StringParser {
   def lowercaseLetter[_: P]: P[String] = CharIn("a-z").!
