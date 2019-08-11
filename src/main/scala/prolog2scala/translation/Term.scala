@@ -31,7 +31,7 @@ object Term {
   }
 
   case class ListTerm(values: Seq[Term], tail: Option[Term]) extends Term {
-    override def variables: Set[Variable] = values appendedAll tail flatMap (_.variables) toSet
+    override def variables: Set[Variable] = (values ++ tail) flatMap (_.variables) toSet
 
     override def toString: String = "[" + values.mkString(",") + tail.map("|" + _).getOrElse("") + "]"
   }

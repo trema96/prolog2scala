@@ -1,16 +1,16 @@
-package prolog2scala.lib
+package prolog2scala.common
 
 object Implicits {
-  implicit class LazyListExtensions[A](base: LazyList[A]) {
+  implicit class IteratorExtended[A](base: Iterator[A]) {
     //TODO generalizzabile?
     /**
       * Take elements until the provided predicate is satisfied (includes the last element)
       * @param p a predicate
-      * @return a lazy list where
+      * @return the iterator were the last element is the first element satisfying the predicate
       */
-    def takeUntil(p: A => Boolean): LazyList[A] = {
+    def takeUntil(p: A => Boolean): Iterator[A] = {
       new Iterator[A]{
-        private val baseIterator: Iterator[A] = base.iterator
+        private val baseIterator: Iterator[A] = base
         private var latest: Option[A] = None
 
         override def hasNext: Boolean = latest.forall(!p(_)) && baseIterator.hasNext
@@ -21,6 +21,8 @@ object Implicits {
           res
         }
       }
-    }.to(LazyList)
+    }
+
+    //def foldLeftAndMap[B, C](initialContext: C)(f: (A, C) => (B, C)): (Iterator[B], C) =
   }
 }
