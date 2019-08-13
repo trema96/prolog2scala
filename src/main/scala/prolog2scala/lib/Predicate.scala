@@ -1,15 +1,15 @@
 package prolog2scala.lib
 
 import prolog2scala.lib.Clause.Solution.{CutSolution, SimpleSolution}
-import prolog2scala.lib.Implicits._
+import prolog2scala.common.Implicits._
 
 case class Predicate[-A,+B](clauses: Clause[A,B]*) {
-  def apply(arg: A): LazyList[B] =
-    clauses to LazyList map {
+  def apply(arg: A): Stream[B] =
+    (clauses toStream).iterator map {
       _(arg)
-    } takeUntil {
+    } takeTo {
       case CutSolution(_) => true
       case _ => false
-    } flatMap (_ solutionsLazyList)
+    } flatMap (_ solutionsStream) toStream
 }
 
