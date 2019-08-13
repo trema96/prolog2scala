@@ -7,13 +7,61 @@ import treehuggerDSL._
 import prolog2scala.translation.TranslationResult._
 
 case class Program(translationDirectives: Seq[TranslationDirective], predicates: Map[(String, Int), Seq[Clause]]) {
-  def translate(program: Program): Unit = ???
+  def translate(): TranslationResult[Tree] =
+    translationDirectives.translateManyWithContext(PredicateTranslationContext(Map.empty))((directive, ctx) =>
+      translatePredicate(directive.predicateName, directive.predicateArguments map (_.predType), ctx) map (newCtx => (null, newCtx))
+    ) map {case (_, PredicateTranslationContext(knownPredicates)) =>
+      OBJECTDEF("TranslatedProgram") := BLOCK(knownPredicates.values map (_._2))
+    }
 
-  private type TranslatedPredicateMap = Map[(String, Seq[PredicateArgument.Type]), (String, Tree)]
+  private type TranslatedPredicateMap = Map[(String, Seq[PredicateArgument.Type]), (String, DefDef)]
 
-  private def translatePredicate(predicateName: String, predicateArguments: Seq[PredicateArgument.Type], ctx: PredicateTranslationContext): TranslationResult[PredicateTranslationContext] = ???
+  private def translatePredicate(predicateName: String, predicateArguments: Seq[PredicateArgument.Type], ctx: PredicateTranslationContext): TranslationResult[PredicateTranslationContext] = {
+    implicit def paramToValDef(param: ValNameStart): ValDef = param.mkTree(EmptyTree)
+    implicit def paramSeqToValDef(param: Seq[ValNameStart]): Seq[ValDef] = param map paramToValDef
 
-  val x = FOR(VALFROM(TUPLE(REF("x"))) := LIT(0) INT_TO LIT(2))
+    if (ctx.knownPredicates.contains((predicateName, predicateArguments))) {
+      TranslationResult.Success(ctx)
+    } else if (!predicates.contains((predicateName, predicateArguments.length))) {
+      TranslationResult.Failure("There is no predicate " + predicateName + "/" + predicateArguments.length)
+    } else {
+      val defDirectiveData: Option[(String, Seq[String])] = translationDirectives filter { directive =>
+        directive.predicateName == predicateName && (directive.predicateArguments map (_.predType)) == predicateArguments
+      } map { directive =>
+        (directive.scalaName, directive.predicateArguments filter (_.predType == PredicateArgument.Type.In) map (_.name))
+      } headOption
+
+      val defName: String =
+        defDirectiveData map (_._1) getOrElse {
+          predicateName + "_" + predicateArguments.map {
+            case PredicateArgument.Type.In => "i"
+            case PredicateArgument.Type.Out => "o"
+          }.mkString
+        }
+
+      val defParamNames: Seq[String] =
+        defDirectiveData map (_._2) getOrElse {
+          (predicateArguments filter (_ == PredicateArgument.Type.In) zipWithIndex) map {case (_, i) => "arg" + i}
+        }
+      val defParamTypes: Seq[Type] = defParamNames map (_ => AnyClass)
+      val defParams: Seq[ValDef] = defParamNames zip defParamTypes map {case (name, tp) => PARAM(name, tp)}
+
+      val defReturn: Type = TYPE_REF("Stream") TYPE_OF TYPE_TUPLE(predicateArguments filter {_ == PredicateArgument.Type.Out} map {_ => AnyClass})//TODO non in predicate
+
+      var defSignature = DEF(defName, defReturn) withParams defParams
+      if (defDirectiveData isEmpty) defSignature = defSignature withFlags Flags.PRIVATE
+
+      predicates((predicateName, predicateArguments.length)).translateManyWithContext(
+        ctx.knownPredicates + ((predicateName, predicateArguments) -> (defName, null))
+      )(
+        (clause, newPredicates) => translateClause(clause, predicateArguments, newPredicates)
+      ) map {case (translatedClauses, newPredicates) =>
+        PredicateTranslationContext(newPredicates + ((predicateName, predicateArguments) -> (defName,
+          defSignature := (TYPE_REF("Predicate") TYPE_OF (TYPE_TUPLE(defParamTypes), defReturn) APPLY translatedClauses APPLY (defParamNames map (REF(_))))
+        )))
+      }
+    }
+  }
 
   private def translateClauseTerm(clauseBodyTerm: Term, ctx: ClauseTermTranslationContext): TranslationResult[(ClauseTermTranslation, ClauseTermTranslationContext)] = clauseBodyTerm match {
     case Struct(name, args) =>
@@ -29,11 +77,14 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         val predName = predCtxResult.knownPredicates((name, argTypes))._1
         args zip argTypes filter (_._2 == PredicateArgument.Type.In) map (_._1) translateMany argToScala flatMap {translatedArgs =>
           args zip argTypes filter (_._2 == PredicateArgument.Type.Out) map (_._1) translateMany (argToScalaPattern(_, ctx.knownVariables)) map {translatedOuts =>
-            (ClauseTermTranslation.ForElement(TUPLE(translatedOuts, flattenUnary = true) := REF(predName) APPLY translatedArgs),
-              ClauseTermTranslationContext(predCtxResult.knownPredicates, ctx.knownVariables ++ (args flatMap (_.variables))))
+            (
+              ClauseTermTranslation.ForElement(VALFROM(TUPLE(translatedOuts, flattenUnary = true)) <-- (REF(predName) APPLY translatedArgs)),
+              ClauseTermTranslationContext(predCtxResult.knownPredicates, ctx.knownVariables ++ (args flatMap (_.variables)))
+            )
           }
         }
       }
+    case Term.Cut => ???
     case _ => TranslationResult.Failure("Term " + clauseBodyTerm + " can't be used as top level term in a clause body")
   }
 
@@ -41,7 +92,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
                        clause: Clause,
                        argTypes: Seq[PredicateArgument.Type],
                        translatedPredicates: TranslatedPredicateMap
-                     ) = {
+                             ): TranslationResult[(Tree, TranslatedPredicateMap)] = {
     clause.body.translateManyWithContext(
       ClauseTermTranslationContext(
         translatedPredicates,
@@ -53,22 +104,27 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
       )
     )(translateClauseTerm) flatMap {case (translatedTerms, ClauseTermTranslationContext(knownPredicates, knownVariables)) =>
       if (clause.head.variables.forall(knownVariables.contains)) {
-        clause.head.args translateMany argToScala map {translatedHeadArgs =>
-          val inputs = translatedHeadArgs.zip(argTypes) filter (_._2 == PredicateArgument.Type.Out) map (_._1)
-          val outputs = translatedHeadArgs.zip(argTypes) filter (_._2 == PredicateArgument.Type.Out) map (_._1)
-          val inputCase = CASE(if (inputs isEmpty) WILDCARD else TUPLE(inputs, flattenUnary = true))
-          val outputResult = TUPLE(outputs, flattenUnary = true)
+        clause.head.args zip argTypes filter (_._2 == PredicateArgument.Type.In) map (_._1) translateMany (argToScalaPattern(_, Set.empty)) flatMap { translatedInputs =>
+          clause.head.args zip argTypes filter (_._2 == PredicateArgument.Type.Out) map (_._1) translateMany argToScala map { translatedOutputs =>
+            val inputCase = CASE(if (translatedInputs isEmpty) WILDCARD else TUPLE(translatedInputs, flattenUnary = true))
+            val outputResult = TUPLE(translatedOutputs, flattenUnary = true)
 
-          if (translatedTerms isEmpty) {
-            REF("Fact") APPLY BLOCK(inputCase ==> outputResult)
-          } else {
-            FOR(
-              translatedTerms collect {
-                case ClauseTermTranslation.ForElement(node) => node
-                case ClauseTermTranslation.Cut => ???
-                case ClauseTermTranslation.Condition(_) => ???
-              }
-            ) YIELD outputResult
+            (
+              if (translatedTerms isEmpty) {
+                REF("Fact") BLOCK(inputCase ==> outputResult)
+              } else {
+                REF("Rule") BLOCK(
+                  inputCase ==> (FOR(
+                    translatedTerms collect {
+                      case ClauseTermTranslation.ForElement(node) => node
+                      case ClauseTermTranslation.Cut => ???
+                      case ClauseTermTranslation.Condition(_) => ???
+                    }
+                  ) YIELD outputResult)
+                )
+              },
+              knownPredicates
+            )
           }
         }
       } else {
@@ -99,8 +155,8 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
     case _ => TranslationResult.Failure("Can't use term " + term + " as an argument")
   }
 
-  private def structNameToScala(name: String): String = name.substring(0,1).toLowerCase + name.substring(1)
-  private def varNameToScala(name: String): String = name.substring(0,1).toUpperCase + name.substring(1)
+  private def structNameToScala(name: String): String = name.substring(0,1).toUpperCase + name.substring(1)
+  private def varNameToScala(name: String): String = name.substring(0,1).toLowerCase + name.substring(1)
 
 
   private sealed trait ClauseTermTranslation
@@ -112,25 +168,4 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
 
   private case class ClauseTermTranslationContext(knownPredicates: TranslatedPredicateMap, knownVariables: Set[Variable])
   private case class PredicateTranslationContext(knownPredicates: TranslatedPredicateMap)
-  /*
-  def translate(): PredicateTranslationResult =
-    translationDirectives.foldLeft[PredicateTranslationResult](PredicateTranslationResult.Success(Set.empty))((prevResult, directive) => prevResult match {
-      case PredicateTranslationResult.Success(knownPredicates) =>
-        translatePredicate(directive.predicateName, directive.predicateArguments map (_.predType), knownPredicates)
-      case x => x
-    })
-
-  private def translatePredicate(
-                                  predName: String,
-                                  predArgsTypes: Seq[PredicateArgument.Type],
-                                  translatedPredicates: Set[(String, Seq[PredicateArgument.Type])]
-                                ): PredicateTranslationResult =
-    predicates.get((predName, predArgsTypes.length)) map {predicateClauses =>
-      predicateClauses.foldLeft[PredicateTranslationResult](PredicateTranslationResult.Success(
-        translatedPredicates + ((predName, predArgsTypes)))
-      )((prevResult, clause) => prevResult match {
-        case PredicateTranslationResult.Success(knownPredicates) => TranslateClause(clause, predArgsTypes, knownPredicates)
-        case OldTranslationResult.Failure(msg) => OldTranslationResult.Failure(msg)
-      })
-    } getOrElse OldTranslationResult.Failure("There is no predicate " + predName + "/" + predArgsTypes.length)*/
 }

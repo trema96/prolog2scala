@@ -8,7 +8,7 @@ object Implicits {
       * @param p a predicate
       * @return the iterator were the last element is the first element satisfying the predicate
       */
-    def takeUntil(p: A => Boolean): Iterator[A] = {
+    def takeTo(p: A => Boolean): Iterator[A] = {
       new Iterator[A]{
         private val baseIterator: Iterator[A] = base
         private var latest: Option[A] = None
