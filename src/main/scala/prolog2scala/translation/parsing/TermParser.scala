@@ -25,7 +25,7 @@ object TermParser {
   def intTerm[_: P]: P[NumberTerm.Int] = intString map (x => NumberTerm.Int(x.toInt))
   def floatTerm[_: P]: P[NumberTerm.Float] = floatString map (x => NumberTerm.Float(x.toDouble))
   def cut[_: P]: P[Term] = P("!") map (_ => Cut)
-  def list[_: P]: P[ListTerm] = P("[" ~ (termList ~ ("|" ~ term).?).? ~ "]") map {
+  def list[_: P]: P[ListTerm] = P("[" ~ (termList ~ ("|" ~ varTerm).?).? ~ "]") map {
     case Some((values, tail)) => ListTerm(values, tail)
     case None => ListTerm(Seq.empty, None)
   }

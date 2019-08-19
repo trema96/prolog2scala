@@ -37,5 +37,7 @@ object TranslationResult {
       translateManyWithContextRec(initialCtx, base)
     }
 
+    def translateFold[B](startingValue: B)(f: (B, A) => TranslationResult[B]): TranslationResult[B] =
+      base.foldLeft[TranslationResult[B]](TranslationResult.Success(startingValue))((currValue, elem) => currValue.flatMap(f(_, elem)))
   }
 }

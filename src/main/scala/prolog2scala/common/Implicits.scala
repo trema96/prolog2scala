@@ -22,7 +22,5 @@ object Implicits {
         }
       }
     }
-
-    //def foldLeftAndMap[B, C](initialContext: C)(f: (A, C) => (B, C)): (Iterator[B], C) =
   }
 }

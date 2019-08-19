@@ -2,7 +2,7 @@ package prolog2scala.translation
 
 import fastparse._
 import org.scalatest.FlatSpec
-import prolog2scala.translation.PredicateArgument.Type.{In, Out}
+import PredicateArgument.Direction.{In, Out}
 import prolog2scala.translation.Term.{ListTerm, Struct, Variable}
 import prolog2scala.translation.parsing.ParsingRules
 
