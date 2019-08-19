@@ -2,10 +2,7 @@ package prolog2scala.translation
 
 import TypeCheck._
 import prolog2scala.translation.ArgumentType._
-
-import treehugger.forest._
-import definitions._
-import treehuggerDSL._
+import prolog2scala.translation.DecidedArgumentType.GroupType
 
 case class ClauseTermTypeCheckContext(structs: StructTypeMap, vars: VarTypeMap) {
   def join(other: ClauseTermTypeCheckContext): ClauseTermTypeCheckContext = ClauseTermTypeCheckContext(structs join other.structs, vars join other.vars)
@@ -46,7 +43,7 @@ object TypeCheck {
   //freeType => typeArgName
   type FreeTypeMap = Map[FreeType, Int]
   //struct => structTraits
-  type TraitMap = Map[Set[StructType], Type]
+  type TraitMap = Map[Set[StructType], DecidedArgumentType.GroupType]
 
 
   //TODO generalizzabile con superclass
@@ -131,6 +128,7 @@ object TypeCheck {
     }
     def replaceArguments(replaceMap: PredicateTypeMap, noReplaceName: String, noReplaceArity: Int, noReplaceArgIndex: Int): (Set[ArgumentType], PredicateTypeMap) =
       replaceArguments(replaceMap, Set((noReplaceName, noReplaceArity, noReplaceArgIndex)))
+    def replaceArguments(replaceMap: PredicateTypeMap): Set[ArgumentType] = replaceArguments(replaceMap, Set())._1
 
     def freeTypeEquivalences: EquivalenceGroups[FreeType] =
       EquivalenceGroups.empty.union(base.collect{case x: FreeType => x}) joinMany base.collect{case ListType(types) => types.freeTypeEquivalences}
@@ -141,7 +139,7 @@ object TypeCheck {
                              structTypeMap: StructTypeMap,
                              traitMap: TraitMap,
                              argName: String
-                           ): (Type,FreeTypeMap, TraitMap) = {
+                           ): (DecidedArgumentType,FreeTypeMap, TraitMap) = {
       require(base.nonEmpty, "leastCommonAncestor can be obtained only from a non-empty type set")
 
       if (base.forall(_.isInstanceOf[ListType])) {
@@ -149,16 +147,12 @@ object TypeCheck {
           case ListType(elemType) => elemType
         }).fold(Set.empty)(_ ++ _).leastCommonAncestor(freeTypeMap, freeTypeEq, structTypeMap, traitMap, argName)
 
-        (TYPE_LIST(elemTypeData._1), elemTypeData._2, elemTypeData._3)
+        (DecidedArgumentType.ListType(elemTypeData._1), elemTypeData._2, elemTypeData._3)
       } else if (base.forall(_.isInstanceOf[StructType])) {
         if (base.size == 1) {
           val resTypeData = base.head.asInstanceOf[StructType]
           (
-            if (structTypeMap.count(_._1._1 == resTypeData.structName) > 1) {
-              TYPE_REF(resTypeData.structName + "_" + resTypeData.structArgsCount)
-            } else {
-              TYPE_REF(resTypeData.structName)
-            },
+            DecidedArgumentType.StructType(structToScalaName(resTypeData, structTypeMap.keys)),
             freeTypeMap,
             traitMap
           )
@@ -167,7 +161,7 @@ object TypeCheck {
           traitMap get structs map{ tp =>
             (tp, freeTypeMap, traitMap)
           } getOrElse {
-            val newType = TYPE_REF(argName.substring(0, 1).toUpperCase + argName.substring(1))
+            val newType = DecidedArgumentType.GroupType(argName.substring(0, 1).toUpperCase + argName.substring(1))
             (
               newType,
               freeTypeMap,
@@ -177,18 +171,18 @@ object TypeCheck {
         }
       } else if (base.forall(_.isInstanceOf[FreeType])) {
         val groupRep = freeTypeEq.find(base.head.asInstanceOf[FreeType])
-        freeTypeMap get groupRep map {tp =>
-          (TYPE_REF("A" + tp), freeTypeMap, traitMap)
+        freeTypeMap get groupRep map {i =>
+          (DecidedArgumentType.TypeArg(i), freeTypeMap, traitMap)
         } getOrElse {
-          val newId = freeTypeMap.getNextId
+          val newIndex = freeTypeMap.getNextIndex
           (
-            TYPE_REF("A" + newId),
-            freeTypeMap  + (groupRep -> newId),
+            DecidedArgumentType.TypeArg(newIndex),
+            freeTypeMap  + (groupRep -> newIndex),
             traitMap
           )
         }
       } else {
-        (AnyClass, freeTypeMap, Map.empty)
+        (DecidedArgumentType.AnyType, freeTypeMap, Map.empty)
       }
     }
 
@@ -201,6 +195,13 @@ object TypeCheck {
   }
 
   implicit class FreeTypeMapExt(base: FreeTypeMap) {
-    def getNextId: Int = base.size + 1
+    def getNextIndex: Int = base.size
   }
+
+  def structToScalaName(struct: ArgumentType.StructType, allStructs: Iterable[(String, Int)]): String =
+    if (allStructs.count(_._1 == struct.structName) > 1) {
+      struct.structName + "_" + struct.structArgsCount
+    } else {
+      struct.structName
+    }
 }

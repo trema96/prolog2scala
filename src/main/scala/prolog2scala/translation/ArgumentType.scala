@@ -39,3 +39,32 @@ object ArgumentType {
     def generateNew: FreeType = {id += 1; new FreeType(id - 1)}
   }
 }
+
+import treehugger.forest._
+import definitions._
+import treehugger.forest
+import treehuggerDSL._
+
+sealed trait DecidedArgumentType {
+  def treeType: Type
+}
+
+object DecidedArgumentType {
+  case object AnyType extends DecidedArgumentType {
+    override def treeType: forest.Type = AnyClass
+  }
+  case class ListType(argumentType: DecidedArgumentType) extends DecidedArgumentType {
+    override def treeType: forest.Type = TYPE_LIST(argumentType.treeType)
+  }
+  case class TypeArg(index: Int) extends DecidedArgumentType {
+    override def treeType: forest.Type = TYPE_REF(typeName)
+    def typeDef: TypeDef = TYPEVAR(typeName)
+    private def typeName = "A" + (index + 1)
+  }
+  case class StructType(name: String) extends DecidedArgumentType {
+    override def treeType: forest.Type = TYPE_REF(name)
+  }
+  case class GroupType(name: String) extends DecidedArgumentType {
+    override def treeType: forest.Type = TYPE_REF(name)
+  }
+}

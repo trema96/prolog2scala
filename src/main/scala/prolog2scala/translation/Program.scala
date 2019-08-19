@@ -2,13 +2,15 @@ package prolog2scala.translation
 
 import treehugger.forest._
 import definitions._
-import prolog2scala.translation.ClauseTermTypeCheckContext
 import prolog2scala.translation.TypeCheck._
 import prolog2scala.translation.ArgumentType._
 import prolog2scala.translation.Term.{ListTerm, Struct, Variable}
 import treehuggerDSL._
 import prolog2scala.translation.TranslationResult._
 import treehugger.forest
+import TreeHuggerUtils._
+
+import scala.collection.immutable
 
 case class Program(translationDirectives: Seq[TranslationDirective], predicates: Map[(String, Int), Seq[Clause]]) {
   def translate(): TranslationResult[Tree] =
@@ -22,9 +24,6 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
   private type TranslatedPredicateMap = Map[(String, Seq[PredicateArgument.Direction]), (String, DefDef)]
 
   private def translatePredicate(predicateName: String, predicateArguments: Seq[PredicateArgument.Direction], ctx: PredicateTranslationContext): TranslationResult[PredicateTranslationContext] = {
-    implicit def paramToValDef(param: ValNameStart): ValDef = param.mkTree(EmptyTree)
-    implicit def paramSeqToValDef(param: Seq[ValNameStart]): Seq[ValDef] = param map paramToValDef
-
     if (ctx.knownPredicates.contains((predicateName, predicateArguments))) {
       TranslationResult.Success(ctx)
     } else if (!predicates.contains((predicateName, predicateArguments.length))) {
@@ -49,7 +48,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
           (predicateArguments filter (_ == PredicateArgument.Direction.In) zipWithIndex) map {case (_, i) => "arg" + i}
         }
       val defParamTypes: Seq[Type] = defParamNames map (_ => AnyClass)
-      val defParams: Seq[ValDef] = defParamNames zip defParamTypes map {case (name, tp) => PARAM(name, tp)}
+      val defParams: Seq[ValDef] = defParamNames zip defParamTypes map {case (name, tp) => PARAM(name, tp)} map paramToValDef
 
       val defReturnTypes: Type = TYPE_TUPLE(predicateArguments filter {_ == PredicateArgument.Direction.Out} map { _ => AnyClass})
 
@@ -176,26 +175,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
   private case class PredicateTranslationContext(knownPredicates: TranslatedPredicateMap)
 
   //TYPECHECK
-  /*
-  var program =
-    """
-      |#lookup: lookup(+list, -elem, -position, -listNoElem)
-      |lookup([H|T],H,zero,T).
-      |lookup([H|T],E,s(N),[H|T2]):- lookup(T,E,N,T2).
-    """.stripMargin
-  program =
-    """
-      |#permutation: permutation(+list, -permutations)
-      |member2([X|Xs],X,Xs).
-      |member2([X|Xs],E,[X|Ys]):-member2(Xs,E,Ys).
-      |permutation([],[]).
-      |permutation(Xs,[X|Ys]) :-
-      | member2(Xs,X,Zs),
-      | permutation(Zs, Ys).
-    """.stripMargin
-    */
-
-  def typeCheck() = {
+  def typeCheck(): TranslationResult[(Map[(String, Int), Seq[forest.Type]], Iterable[forest.ClassDef])] = {
     (predicates.values.flatten toSeq) translateMany typeCheckClause map (_ joinMany) map { typeData =>
       val cleanPredicates = typeData.predicates.foldLeft(typeData.predicates)((predMap, currEntry) =>
         currEntry._2.zipWithIndex.foldLeft(predMap)((argPredMap, currArg) => {
@@ -204,14 +184,11 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         })
       )
       val typesEquivalences = EquivalenceGroups.empty joinMany cleanPredicates.values.flatMap(_.map(_.freeTypeEquivalences))
-      println(typeData.predicates)
-      println(cleanPredicates)
-      println(typesEquivalences)
       var traitMap: TraitMap = Map.empty
-      val predTypeMap = cleanPredicates.map{ case (key, value) =>
+      val predTypeMap: Map[(String, Int), Seq[DecidedArgumentType]] = cleanPredicates.map{ case (key, value) =>
         (
           key,
-          value.zipWithIndex.foldLeft[(Seq[Type], FreeTypeMap)]((Seq.empty, Map.empty))((ctx, currTypes) => {
+          value.zipWithIndex.foldLeft[(Seq[DecidedArgumentType], FreeTypeMap)]((Seq.empty, Map.empty))((ctx, currTypes) => {
             val ancestorData = currTypes._1.leastCommonAncestor(
               ctx._2,
               typesEquivalences,
@@ -226,9 +203,32 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
           })._1
         )
       }
-      //val cleanStructs = typeData.structs.map{case (key, value) => (key, value.zipWithIndex.map(arg => arg._1.replaceArguments(cleanPredicates)))}
+      val cleanStructs = typeData.structs.map{case (key, value) => (key, value.map(_.replaceArguments(cleanPredicates)))}
+      val structTypeMap: Map[(String, Int), Seq[DecidedArgumentType]] = cleanStructs.map{ case (key, value) =>
+        (
+          key,
+          value.zipWithIndex.foldLeft[(Seq[DecidedArgumentType], FreeTypeMap)]((Seq.empty, Map.empty))((ctx, currTypes) => {
+            val ancestorData = currTypes._1.leastCommonAncestor(
+              ctx._2,
+              typesEquivalences,
+              typeData.structs,
+              traitMap,
+              key._1 + "_" + key._2 + "_arg" + currTypes._2
+            )
+            traitMap = ancestorData._3
+            (ctx._1 :+ ancestorData._1, ancestorData._2)
+          })._1
+        )
+      }
 
-      predTypeMap
+      val structDefs: Iterable[ClassDef] = structTypeMap map { case ((structName, structArity), args) =>
+        CASECLASSDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParams
+          args.zipWithIndex.map(arg => PARAM("arg" + arg._2, arg._1.treeType)).map(paramToValDef) withParents
+          traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType} withTypeParams
+          args.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef}
+      } map toEmptyClassDef
+      val traitsDef: Iterable[ClassDef] = traitMap.values map { trt => TRAITDEF(trt.name)} map toEmptyClassDef
+      (predTypeMap.mapValues(_.map(_.treeType)), traitsDef ++ structDefs)
     }
   }
 
