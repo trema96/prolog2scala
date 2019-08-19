@@ -12,6 +12,7 @@ import TreeHuggerUtils._
 import Utils._
 
 import scala.collection.immutable
+import scala.collection.immutable.SortedSet
 
 case class Program(translationDirectives: Seq[TranslationDirective], predicates: Map[(String, Int), Seq[Clause]]) {
   private var predicateTypes: Map[(String, Int), (Seq[forest.Type], Seq[forest.TypeDef])] = _ //TODO molto brutto
@@ -235,7 +236,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
           CASECLASSDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParams
             args.zipWithIndex.map(arg => PARAM("arg" + arg._2, arg._1.treeType)).map(paramToValDef) withParents
             traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType} withTypeParams
-            args.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef}
+            args.flatMap(_.typeArg).distinct.map(_.typeDef)
         } else {
           CASEOBJECTDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParents
             traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType}
@@ -243,7 +244,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
       } map (_.mkTree(EmptyTree))
       val traitsDef: Iterable[ClassDef] = traitMap.values map { trt => TRAITDEF(trt.name)} map toEmptyClassDef
       (
-        predTypeMap.mapValues(values => (values.map(_.treeType), values.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef})),
+        predTypeMap.mapValues(values => (values.map(_.treeType), values.flatMap(_.typeArg).distinct.map(_.typeDef))),
         traitsDef ++ structDefs
       )
     }

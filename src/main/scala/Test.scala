@@ -133,7 +133,7 @@ object TryTransl extends App {
 
 object TryTranslated extends App {
   object TranslatedProgram {
-    def permutation(list: List[A1]): Stream[List[A1]] = Predicate[List[A1], List[A1]](Fact({
+    def permutation[A1](list: List[A1]): Stream[List[A1]] = Predicate[List[A1], List[A1]](Fact({
       case Nil => List()
     }), Rule({
       case xs => for {
@@ -148,6 +148,7 @@ object TryTranslated extends App {
         yield (e, List(x) ++ ys)
     }))(arg0)
   }
+
 
   import TranslatedProgram._
   //println(lookup(List(1,2,3,4), S(Zero)) toList)
