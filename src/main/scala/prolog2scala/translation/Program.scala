@@ -9,26 +9,38 @@ import treehuggerDSL._
 import prolog2scala.translation.TranslationResult._
 import treehugger.forest
 import TreeHuggerUtils._
+import Utils._
 
 import scala.collection.immutable
 
 case class Program(translationDirectives: Seq[TranslationDirective], predicates: Map[(String, Int), Seq[Clause]]) {
-  def translate(): TranslationResult[Tree] =
-    translationDirectives.translateManyWithContext(PredicateTranslationContext(Map.empty))((directive, ctx) =>
-      translatePredicate(directive.predicateName, directive.predicateArguments map (_.direction), ctx) map (newCtx => (null, newCtx))
-    ) map {case (_, PredicateTranslationContext(knownPredicates)) =>
-      OBJECTDEF("TranslatedProgram") := BLOCK(knownPredicates.values map (_._2))
-    }
+  private var predicateTypes: Map[(String, Int), (Seq[forest.Type], Seq[forest.TypeDef])] = _ //TODO molto brutto
+
+  def translate(): TranslationResult[Tree] = {
+    typeCheck() flatMap (typeInfo => {
+      predicateTypes = typeInfo._1
+      translationDirectives.translateManyWithContext(PredicateTranslationContext(Map.empty))((directive, ctx) =>
+        translatePredicate(directive.predicateName, directive.predicateArguments map (_.direction), ctx) map (newCtx => (null, newCtx))
+      ) map {case (_, PredicateTranslationContext(knownPredicates)) =>
+        OBJECTDEF("TranslatedProgram") := BLOCK(typeInfo._2 ++ (knownPredicates.values map (_._2)))
+      }
+    })
+  }
 
   //(predicateName, predicateArguments) => (predicateDefName, predicateDefTree)
   private type TranslatedPredicateMap = Map[(String, Seq[PredicateArgument.Direction]), (String, DefDef)]
 
-  private def translatePredicate(predicateName: String, predicateArguments: Seq[PredicateArgument.Direction], ctx: PredicateTranslationContext): TranslationResult[PredicateTranslationContext] = {
+  private def translatePredicate(
+                                  predicateName: String,
+                                  predicateArguments: Seq[PredicateArgument.Direction],
+                                  ctx: PredicateTranslationContext
+                                ): TranslationResult[PredicateTranslationContext] = {
     if (ctx.knownPredicates.contains((predicateName, predicateArguments))) {
       TranslationResult.Success(ctx)
     } else if (!predicates.contains((predicateName, predicateArguments.length))) {
       TranslationResult.Failure("There is no predicate " + predicateName + "/" + predicateArguments.length)
     } else {
+      val thisPredicateTypes = predicateTypes((predicateName, predicateArguments.length))
       val defDirectiveData: Option[(String, Seq[String])] = translationDirectives filter { directive =>
         directive.predicateName == predicateName && (directive.predicateArguments map (_.direction)) == predicateArguments
       } map { directive =>
@@ -47,12 +59,13 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         defDirectiveData map (_._2) getOrElse {
           (predicateArguments filter (_ == PredicateArgument.Direction.In) zipWithIndex) map {case (_, i) => "arg" + i}
         }
-      val defParamTypes: Seq[Type] = defParamNames map (_ => AnyClass)
+      val defParamTypes: Seq[Type] = predicateArguments.zipWithIndex filter (_._1 == PredicateArgument.Direction.In) map (arg => thisPredicateTypes._1(arg._2))
       val defParams: Seq[ValDef] = defParamNames zip defParamTypes map {case (name, tp) => PARAM(name, tp)} map paramToValDef
 
-      val defReturnTypes: Type = TYPE_TUPLE(predicateArguments filter {_ == PredicateArgument.Direction.Out} map { _ => AnyClass})
+      val defReturnTypes: Type = TYPE_TUPLE(predicateArguments.zipWithIndex filter (_._1 == PredicateArgument.Direction.Out) map (arg => thisPredicateTypes._1(arg._2)))
 
-      var defSignature = DEF(defName, TYPE_REF("Stream") TYPE_OF defReturnTypes) withParams defParams
+      var defSignature =
+        DEF(defName, TYPE_REF("Stream") TYPE_OF defReturnTypes) withParams defParams withTypeParams thisPredicateTypes._2
       if (defDirectiveData isEmpty) defSignature = defSignature withFlags Flags.PRIVATE
 
       predicates((predicateName, predicateArguments.length)).translateManyWithContext(
@@ -142,7 +155,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
     case Struct(name, Nil) => TranslationResult.Success(REF(structNameToScala(name)))
     case Struct(name, args) => args.translateMany(argToScala) map (REF(structNameToScala(name)) APPLY _)
     case Variable(name) => TranslationResult.Success(REF(varNameToScala(name)))
-    case ListTerm(values, None) => values.translateMany(argToScala) map (TYPE_LIST(AnyClass) APPLY _)
+    case ListTerm(values, None) => values.translateMany(argToScala) map (TYPE_REF("List") APPLY _)
     case ListTerm(values, Some(tail)) => argToScala(tail) flatMap (translatedTail =>
         values.translateMany(argToScala) map (REF("List") APPLY _ INFIX "++" APPLY translatedTail)
       )
@@ -160,10 +173,6 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
     case _ => TranslationResult.Failure("Can't use term " + term + " as an argument")
   }
 
-  private def structNameToScala(name: String): String = name.substring(0,1).toUpperCase + name.substring(1)
-  private def varNameToScala(name: String): String = name.substring(0,1).toLowerCase + name.substring(1)
-
-
   private sealed trait ClauseTermTranslation
   private object ClauseTermTranslation {
     case class ForElement(node: Enumerator) extends ClauseTermTranslation
@@ -175,7 +184,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
   private case class PredicateTranslationContext(knownPredicates: TranslatedPredicateMap)
 
   //TYPECHECK
-  def typeCheck(): TranslationResult[(Map[(String, Int), Seq[forest.Type]], Iterable[forest.ClassDef])] = {
+  def typeCheck(): TranslationResult[(Map[(String, Int), (Seq[forest.Type], Seq[forest.TypeDef])], Iterable[forest.Tree])] = {
     (predicates.values.flatten toSeq) translateMany typeCheckClause map (_ joinMany) map { typeData =>
       val cleanPredicates = typeData.predicates.foldLeft(typeData.predicates)((predMap, currEntry) =>
         currEntry._2.zipWithIndex.foldLeft(predMap)((argPredMap, currArg) => {
@@ -221,14 +230,22 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         )
       }
 
-      val structDefs: Iterable[ClassDef] = structTypeMap map { case ((structName, structArity), args) =>
-        CASECLASSDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParams
-          args.zipWithIndex.map(arg => PARAM("arg" + arg._2, arg._1.treeType)).map(paramToValDef) withParents
-          traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType} withTypeParams
-          args.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef}
-      } map toEmptyClassDef
+      val structDefs: Iterable[forest.Tree] = structTypeMap map { case ((structName, structArity), args) =>
+        if (args nonEmpty) {
+          CASECLASSDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParams
+            args.zipWithIndex.map(arg => PARAM("arg" + arg._2, arg._1.treeType)).map(paramToValDef) withParents
+            traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType} withTypeParams
+            args.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef}
+        } else {
+          CASEOBJECTDEF(structToScalaName(StructType(structName, structArity), structTypeMap.keys)) withParents
+            traitMap.collect{case (key, value) if key.contains(StructType(structName, structArity)) => value.treeType}
+        }
+      } map (_.mkTree(EmptyTree))
       val traitsDef: Iterable[ClassDef] = traitMap.values map { trt => TRAITDEF(trt.name)} map toEmptyClassDef
-      (predTypeMap.mapValues(_.map(_.treeType)), traitsDef ++ structDefs)
+      (
+        predTypeMap.mapValues(values => (values.map(_.treeType), values.collect{ case x: DecidedArgumentType.TypeArg => x.typeDef})),
+        traitsDef ++ structDefs
+      )
     }
   }
 

@@ -2,7 +2,7 @@ package prolog2scala.translation
 
 import TypeCheck._
 import prolog2scala.translation.ArgumentType._
-import prolog2scala.translation.DecidedArgumentType.GroupType
+import prolog2scala.translation.Utils._
 
 case class ClauseTermTypeCheckContext(structs: StructTypeMap, vars: VarTypeMap) {
   def join(other: ClauseTermTypeCheckContext): ClauseTermTypeCheckContext = ClauseTermTypeCheckContext(structs join other.structs, vars join other.vars)
@@ -161,7 +161,7 @@ object TypeCheck {
           traitMap get structs map{ tp =>
             (tp, freeTypeMap, traitMap)
           } getOrElse {
-            val newType = DecidedArgumentType.GroupType(argName.substring(0, 1).toUpperCase + argName.substring(1))
+            val newType = DecidedArgumentType.GroupType(structNameToScala(argName))
             (
               newType,
               freeTypeMap,
@@ -199,9 +199,11 @@ object TypeCheck {
   }
 
   def structToScalaName(struct: ArgumentType.StructType, allStructs: Iterable[(String, Int)]): String =
-    if (allStructs.count(_._1 == struct.structName) > 1) {
-      struct.structName + "_" + struct.structArgsCount
-    } else {
-      struct.structName
-    }
+    structNameToScala(
+      if (allStructs.count(_._1 == struct.structName) > 1) {
+        struct.structName + "_" + struct.structArgsCount
+      } else {
+        struct.structName
+      }
+    )
 }

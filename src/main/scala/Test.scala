@@ -105,7 +105,7 @@ import fastparse._
 object TryTransl extends App {
   val program1 =
     """
-      |#lookup: lookup(+list, -elem, -position, -listNoElem)
+      |#lookup: lookup(+list, -elem, +position, -listNoElem)
       |lookup([H|T],H,zero,T).
       |lookup([H|T],E,s(N),[H|T2]):- lookup(T,E,N,T2).
     """.stripMargin
@@ -120,37 +120,28 @@ object TryTransl extends App {
       | permutation(Zs, Ys).
     """.stripMargin
 
-  val program = program1
+  val program = program2
   val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
   val TranslationResult.Success(tree) = parseResult.translate()
   println(treeToString(tree))
+  /*
   val TranslationResult.Success(types) = parseResult.typeCheck()
   println(types._1)
   types._2.foreach(x => println(treeToString(x)))
+  */
 }
 
 object TryTranslated extends App {
   object TranslatedProgram {
-    /*
-    case object Zero
-    case class S(arg1: Any)
-
-    def lookup(list: Any): Stream[(Any, Any, List[Any])] = Predicate[Any, (Any, Any, List[Any])](Fact({
-      case h :: t => (h, Zero, t)
-    }), Rule({
-      case h :: t => for ((e, n, t2) <- lookup(t))
-        yield (e, S(n), List(h) ++ t2)
-    }))(list)
-    */
-    def permutation(list: List[Any]): Stream[List[Any]] = Predicate[List[Any], List[Any]](Fact({
-      case Nil => List[Any]()
+    def permutation(list: List[A1]): Stream[List[A1]] = Predicate[List[A1], List[A1]](Fact({
+      case Nil => List()
     }), Rule({
       case xs => for {
         (x, zs) <- member2_ioo(xs)
         ys <- permutation(zs)
       } yield List(x) ++ ys
     }))(list)
-    private def member2_ioo(arg0: List[Any]): Stream[(Any, List[Any])] = Predicate[List[Any], (Any, List[Any])](Fact({
+    private def member2_ioo[A1](arg0: List[A1]): Stream[(A1, List[A1])] = Predicate[List[A1], (A1, List[A1])](Fact({
       case x :: xs => (x, xs)
     }), Rule({
       case x :: xs => for ((e, ys) <- member2_ioo(xs))
@@ -158,7 +149,8 @@ object TryTranslated extends App {
     }))(arg0)
   }
 
-  //println(TranslatedProgram.lookup(List(1,2,3,4)) toList)
+  import TranslatedProgram._
+  //println(lookup(List(1,2,3,4), S(Zero)) toList)
   println(TranslatedProgram.permutation(List(1,2,3,4)) toList)
 }
 
