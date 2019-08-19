@@ -116,14 +116,14 @@ object TypeCheck {
         case TypeOfArg(predName, predArity, argIndex) if noReplace.contains((predName, predArity, argIndex)) =>
           updatedValues
         case TypeOfArg(predName, predArity, argIndex) =>
-          replaceMap
+          updatedValues._2
             .get((predName, predArity))
             .map(_ (argIndex))
-            .map(_.replaceArguments(replaceMap, noReplace + ((predName, predArity, argIndex))))
+            .map(_.replaceArguments(updatedValues._2, noReplace + ((predName, predArity, argIndex))))
             .map{ replaceRes =>
-              (replaceRes._1, replaceMap + ((predName, predArity) -> replaceMap((predName, predArity)).updated(argIndex, replaceRes._1)))
+              (updatedValues._1 ++ replaceRes._1, updatedValues._2 + ((predName, predArity) -> updatedValues._2((predName, predArity)).updated(argIndex, replaceRes._1)))
             }
-            .getOrElse((Set(), replaceMap))
+            .getOrElse((updatedValues._1, updatedValues._2))
         case x =>
           (updatedValues._1 + x, updatedValues._2)
       })

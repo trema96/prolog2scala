@@ -120,7 +120,7 @@ object TryTransl extends App {
       | permutation(Zs, Ys).
     """.stripMargin
 
-  val program = program1
+  val program = program2
   val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
   val TranslationResult.Success(tree) = parseResult.translate()
   println(treeToString(tree))
