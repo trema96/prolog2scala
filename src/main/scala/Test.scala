@@ -130,8 +130,14 @@ object TryTranslation extends App {
       |father(terach,abraham).
       |male(isaac).
     """.stripMargin
+  val program4 =
+    """
+      |#same: same(+list1, +list2)
+      |same([],[]).
+      |same([X|Xs],[X|Ys]):- same(Xs,Ys).
+    """.stripMargin
 
-  val program = program3
+  val program = program4
   val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
   val TranslationResult.Success(tree) = parseResult.translate()
   println(treeToString(tree))
@@ -144,54 +150,20 @@ object TryTranslation extends App {
 
 object TryTranslated extends App {
   object TranslatedProgram {
-    case object Abraham
-    case object Terach
-    case object Nachor
-    case object Isaac
-    private def father_io(arg0: Any): Stream[Any] = Predicate[Any, Any](Fact({
-      case Abraham => Isaac
-    }), Fact({
-      case Terach => Nachor
-    }), Fact({
-      case Terach => Abraham
-    }))(arg0)
-    private def father_ii(arg0: Any, arg1: Any): Stream[Unit] = Predicate[(Any, Any), Unit](Fact({
-      case (Abraham, Isaac) => ()
-    }), Fact({
-      case (Terach, Nachor) => ()
-    }), Fact({
-      case (Terach, Abraham) => ()
-    }))(arg0, arg1)
-    def grandfatherOf(personB: Any): Stream[Any] = Predicate[Any, Any](Rule({
-      case z => for {
-        (x, y) <- father_oo()
-        () <- father_ii(y, z)
-      } yield x
-    }))(personB)
-    private def male_i(arg0: Any): Stream[Unit] = Predicate[Any, Unit](Fact({
-      case Isaac => ()
-    }))(arg0)
-    def sonOf(personB: Any): Stream[Any] = Predicate[Any, Any](Rule({
-      case y => for {
-        x <- father_io(y)
-        () <- male_i(x)
-      } yield x
-    }))(personB)
-    private def father_oo(): Stream[(Any, Any)] = Predicate[Unit, (Any, Any)](Fact({
-      case _ => (Abraham, Isaac)
-    }), Fact({
-      case _ => (Terach, Nachor)
-    }), Fact({
-      case _ => (Terach, Abraham)
-    }))()
+    def same[A1](list1: List[A1], list2: List[A1]): Stream[Unit] = Predicate[(List[A1], List[A1]), Unit](Fact({
+      case (Nil, Nil) => ()
+    }), Rule({
+      case (x :: xs, x :: ys) => for (() <- same(xs, ys))
+        yield ()
+    }))(list1, list2)
   }
-
-
   import TranslatedProgram._
   //println(lookup(List(1,2,3,4), S(Zero)) toList)
-  //println(TranslatedProgram.permutation(List(1,2,3,4)) toList)
-  println(sonOf(Abraham) toList)
-  println(grandfatherOf(Isaac) toList)
+  //println(permutation(List(1,2,3,4)) toList)
+  //println(sonOf(Abraham) toList)
+  //println(grandfatherOf(Isaac) toList)
+  println(same(List("a","b","c"),List(1,2,3)) toList)
+  println(same(List("a",2,3),List("a",2,3)) toList)
 }
 
 object TryPattern extends App {

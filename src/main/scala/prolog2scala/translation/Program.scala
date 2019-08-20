@@ -19,7 +19,6 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
 
   def translate(): TranslationResult[Tree] = {
     typeCheck() flatMap (typeInfo => {
-      println(typeInfo)
       predicateTypes = typeInfo._1
       translationDirectives.translateManyWithContext(PredicateTranslationContext(Map.empty))((directive, ctx) =>
         translatePredicate(directive.predicateName, directive.predicateArguments map (_.direction), ctx) map (newCtx => (null, newCtx))
@@ -253,10 +252,6 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         }
       } map (_.mkTree(EmptyTree))
       val traitsDef: Iterable[ClassDef] = traitMap.values map { trt => TRAITDEF(trt.name)} map toEmptyClassDef
-      println(typeData.predicates)
-      println(cleanPredicates)
-      println(typeData.structs)
-      println(traitMap)
       (
         predTypeMap.mapValues(values => (values.map(_.treeType), values.flatMap(_.typeArg).distinct.map(_.typeDef))),
         traitsDef ++ structDefs

@@ -142,34 +142,7 @@ object TypeCheck {
                            ): (DecidedArgumentType,FreeTypeMap, TraitMap) = {
       require(base.nonEmpty, "leastCommonAncestor can be obtained only from a non-empty type set")
 
-      if (base.forall(_.isInstanceOf[ListType])) {
-        val elemTypeData = (base collect {
-          case ListType(elemType) => elemType
-        }).fold(Set.empty)(_ ++ _).leastCommonAncestor(freeTypeMap, freeTypeEq, structTypeMap, traitMap, argName)
-
-        (DecidedArgumentType.ListType(elemTypeData._1), elemTypeData._2, elemTypeData._3)
-      } else if (base.forall(_.isInstanceOf[StructType])) {
-        if (base.size == 1) {
-          val resTypeData = base.head.asInstanceOf[StructType]
-          (
-            DecidedArgumentType.StructType(structToScalaName(resTypeData, structTypeMap.keys)),
-            freeTypeMap,
-            traitMap
-          )
-        } else {
-          val structs = base.map(_.asInstanceOf[StructType])
-          traitMap get structs map{ tp =>
-            (tp, freeTypeMap, traitMap)
-          } getOrElse {
-            val newType = DecidedArgumentType.GroupType(structNameToScala(argName))
-            (
-              newType,
-              freeTypeMap,
-              traitMap + (structs -> newType)
-            )
-          }
-        }
-      } else if (base.forall(_.isInstanceOf[FreeType])) {
+      if (base.forall(_.isInstanceOf[FreeType])) {
         val groupRep = freeTypeEq.find(base.head.asInstanceOf[FreeType])
         freeTypeMap get groupRep map {i =>
           (DecidedArgumentType.TypeArg(i), freeTypeMap, traitMap)
@@ -182,7 +155,37 @@ object TypeCheck {
           )
         }
       } else {
-        (DecidedArgumentType.AnyType, freeTypeMap, Map.empty)
+        val noFreeTypes = base.filter(!_.isInstanceOf[FreeType])
+        if (noFreeTypes.forall(_.isInstanceOf[StructType])) {
+          if (noFreeTypes.size == 1) {
+            val resTypeData = noFreeTypes.head.asInstanceOf[StructType]
+            (
+              DecidedArgumentType.StructType(structToScalaName(resTypeData, structTypeMap.keys)),
+              freeTypeMap,
+              traitMap
+            )
+          } else {
+            val structs = noFreeTypes.map(_.asInstanceOf[StructType])
+            traitMap get structs map { tp =>
+              (tp, freeTypeMap, traitMap)
+            } getOrElse {
+              val newType = DecidedArgumentType.GroupType(structNameToScala(argName))
+              (
+                newType,
+                freeTypeMap,
+                traitMap + (structs -> newType)
+              )
+            }
+          }
+        } else if (noFreeTypes.forall(_.isInstanceOf[ListType])) {
+          val elemTypeData = (noFreeTypes collect {
+            case ListType(elemType) => elemType
+          }).fold(Set.empty)(_ ++ _).leastCommonAncestor(freeTypeMap, freeTypeEq, structTypeMap, traitMap, argName)
+
+          (DecidedArgumentType.ListType(elemTypeData._1), elemTypeData._2, elemTypeData._3)
+        } else {
+          (DecidedArgumentType.AnyType, freeTypeMap, Map.empty)
+        }
       }
     }
 
