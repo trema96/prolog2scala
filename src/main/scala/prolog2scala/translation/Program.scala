@@ -19,6 +19,7 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
 
   def translate(): TranslationResult[Tree] = {
     typeCheck() flatMap (typeInfo => {
+      println(typeInfo)
       predicateTypes = typeInfo._1
       translationDirectives.translateManyWithContext(PredicateTranslationContext(Map.empty))((directive, ctx) =>
         translatePredicate(directive.predicateName, directive.predicateArguments map (_.direction), ctx) map (newCtx => (null, newCtx))
@@ -63,10 +64,11 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
       val defParamTypes: Seq[Type] = predicateArguments.zipWithIndex filter (_._1 == PredicateArgument.Direction.In) map (arg => thisPredicateTypes._1(arg._2))
       val defParams: Seq[ValDef] = defParamNames zip defParamTypes map {case (name, tp) => PARAM(name, tp)} map paramToValDef
 
-      val defReturnTypes: Type = TYPE_TUPLE(predicateArguments.zipWithIndex filter (_._1 == PredicateArgument.Direction.Out) map (arg => thisPredicateTypes._1(arg._2)))
+      val defReturnType: Type = typesToSingleType(predicateArguments.zipWithIndex filter (_._1 == PredicateArgument.Direction.Out) map (arg => thisPredicateTypes._1(arg._2)))
+
 
       var defSignature =
-        DEF(defName, TYPE_REF("Stream") TYPE_OF defReturnTypes) withParams defParams withTypeParams thisPredicateTypes._2
+        DEF(defName, TYPE_REF("Stream") TYPE_OF defReturnType) withParams defParams withTypeParams thisPredicateTypes._2
       if (defDirectiveData isEmpty) defSignature = defSignature withFlags Flags.PRIVATE
 
       predicates((predicateName, predicateArguments.length)).translateManyWithContext(
@@ -75,11 +77,19 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         (clause, newPredicates) => translateClause(clause, predicateArguments, newPredicates)
       ) map {case (translatedClauses, newPredicates) =>
         PredicateTranslationContext(newPredicates + ((predicateName, predicateArguments) -> (defName,
-          defSignature := (TYPE_REF("Predicate") TYPE_OF (TYPE_TUPLE(defParamTypes), defReturnTypes) APPLY translatedClauses APPLY (defParamNames map (REF(_))))
+          defSignature := (TYPE_REF("Predicate") TYPE_OF (typesToSingleType(defParamTypes), defReturnType) APPLY translatedClauses APPLY (defParamNames map (REF(_))))
         )))
       }
     }
   }
+
+  private def typesToSingleType(types: Iterable[Type]): Type =
+    if (types isEmpty)
+      UnitClass
+    else if (types.size == 1)
+      types.head
+    else
+      TYPE_TUPLE(types)
 
   private def translateClauseTerm(clauseBodyTerm: Term, ctx: ClauseTermTranslationContext): TranslationResult[(ClauseTermTranslation, ClauseTermTranslationContext)] = clauseBodyTerm match {
     case Struct(name, args) =>
@@ -243,6 +253,10 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         }
       } map (_.mkTree(EmptyTree))
       val traitsDef: Iterable[ClassDef] = traitMap.values map { trt => TRAITDEF(trt.name)} map toEmptyClassDef
+      println(typeData.predicates)
+      println(cleanPredicates)
+      println(typeData.structs)
+      println(traitMap)
       (
         predTypeMap.mapValues(values => (values.map(_.treeType), values.flatMap(_.typeArg).distinct.map(_.typeDef))),
         traitsDef ++ structDefs

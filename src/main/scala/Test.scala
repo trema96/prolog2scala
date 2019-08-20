@@ -102,7 +102,7 @@ object TryTree extends App {
 }
 
 import fastparse._
-object TryTransl extends App {
+object TryTranslation extends App {
   val program1 =
     """
       |#lookup: lookup(+list, -elem, +position, -listNoElem)
@@ -119,8 +119,19 @@ object TryTransl extends App {
       | member2(Xs,X,Zs),
       | permutation(Zs, Ys).
     """.stripMargin
+  val program3 =
+    """
+      |#sonOf: son(-personA, +personB)
+      |#grandfatherOf: grandfather(-personA, +personB)
+      |son(X,Y):-father(Y,X),male(X).
+      |grandfather(X,Z):-father(X,Y),father(Y,Z).
+      |father(abraham,isaac).
+      |father(terach,nachor).
+      |father(terach,abraham).
+      |male(isaac).
+    """.stripMargin
 
-  val program = program2
+  val program = program3
   val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
   val TranslationResult.Success(tree) = parseResult.translate()
   println(treeToString(tree))
@@ -133,26 +144,54 @@ object TryTransl extends App {
 
 object TryTranslated extends App {
   object TranslatedProgram {
-    def permutation[A1](list: List[A1]): Stream[List[A1]] = Predicate[List[A1], List[A1]](Fact({
-      case Nil => List()
-    }), Rule({
-      case xs => for {
-        (x, zs) <- member2_ioo(xs)
-        ys <- permutation(zs)
-      } yield List(x) ++ ys
-    }))(list)
-    private def member2_ioo[A1](arg0: List[A1]): Stream[(A1, List[A1])] = Predicate[List[A1], (A1, List[A1])](Fact({
-      case x :: xs => (x, xs)
-    }), Rule({
-      case x :: xs => for ((e, ys) <- member2_ioo(xs))
-        yield (e, List(x) ++ ys)
+    case object Abraham
+    case object Terach
+    case object Nachor
+    case object Isaac
+    private def father_io(arg0: Any): Stream[Any] = Predicate[Any, Any](Fact({
+      case Abraham => Isaac
+    }), Fact({
+      case Terach => Nachor
+    }), Fact({
+      case Terach => Abraham
     }))(arg0)
+    private def father_ii(arg0: Any, arg1: Any): Stream[Unit] = Predicate[(Any, Any), Unit](Fact({
+      case (Abraham, Isaac) => ()
+    }), Fact({
+      case (Terach, Nachor) => ()
+    }), Fact({
+      case (Terach, Abraham) => ()
+    }))(arg0, arg1)
+    def grandfatherOf(personB: Any): Stream[Any] = Predicate[Any, Any](Rule({
+      case z => for {
+        (x, y) <- father_oo()
+        () <- father_ii(y, z)
+      } yield x
+    }))(personB)
+    private def male_i(arg0: Any): Stream[Unit] = Predicate[Any, Unit](Fact({
+      case Isaac => ()
+    }))(arg0)
+    def sonOf(personB: Any): Stream[Any] = Predicate[Any, Any](Rule({
+      case y => for {
+        x <- father_io(y)
+        () <- male_i(x)
+      } yield x
+    }))(personB)
+    private def father_oo(): Stream[(Any, Any)] = Predicate[Unit, (Any, Any)](Fact({
+      case _ => (Abraham, Isaac)
+    }), Fact({
+      case _ => (Terach, Nachor)
+    }), Fact({
+      case _ => (Terach, Abraham)
+    }))()
   }
 
 
   import TranslatedProgram._
   //println(lookup(List(1,2,3,4), S(Zero)) toList)
-  println(TranslatedProgram.permutation(List(1,2,3,4)) toList)
+  //println(TranslatedProgram.permutation(List(1,2,3,4)) toList)
+  println(sonOf(Abraham) toList)
+  println(grandfatherOf(Isaac) toList)
 }
 
 object TryPattern extends App {
