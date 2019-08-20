@@ -1,89 +1,100 @@
 package prolog2scala.translation
 
-import fastparse.{Parsed, parse}
 import org.scalatest.{FlatSpec, Matchers}
 import prolog2scala.translation.parsing.ParsingRules
+import fastparse._
+import prolog2scala.translation.PredicateArgument.Direction.{In, Out}
+import prolog2scala.translation.Term._
+import prolog2scala.translation.TestPrograms.{ProgramData, ProgramString}
 
-/*
-class TestTranslation extends FlatSpec with Matchers {
-  "A correct program" should "correctly translate" in {
-    val program =
-      """
-        |#lookup: lookup(+list, -elem, -position, -listNoElem)
-        |lookup([H|T],H,zero,T).
-        |lookup([H|T],E,s(N),[H|T2]):- lookup(T,E,N,T2).
-      """.stripMargin
-    val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
-    parseResult.translate() should matchPattern {
-      case PredicateTranslationResult.Success(_) =>
+trait ProgramBehaviour { this: FlatSpec with Matchers =>
+  def correctProgram(programData: => ProgramData) {
+    it should "be parsed correctly" in {
+      val parseResult = parse(programData.program, ParsingRules.program(_))
+      parseResult should matchPattern {
+        case Parsed.Success(_, _) =>
+      }
+    }
+
+    it should "be translated correctly" in {
+      val Parsed.Success(programTree, _) = parse(programData.program, ParsingRules.program(_))
+      programTree.translate() should matchPattern {
+        case TranslationResult.Success(_) =>
+      }
+    }
+
+    it should "match expected translation" in {
+      val Parsed.Success(programTree, _) = parse(programData.program, ParsingRules.program(_))
+      val TranslationResult.Success(translationTree) = programTree.translate()
+      val actual = treehugger.forest.treeToString(translationTree).toCharArray.map(_.toInt).filter(_ != 13).map(_.toChar).mkString("")
+      val expected = programData.expectedTranslation
+      actual shouldEqual expected
     }
   }
 
-  "A correct program, with invalid input types" should "not correctly translate" in {
-    val program =
-      """
-        |#lookup: lookup(-list, +elem, +position, -listNoElem)
-        |lookup([H|T],H,zero,T).
-        |lookup([H|T],E,s(N),[H|T2]):- lookup(T,E,N,T2).
-      """.stripMargin
-    val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
-    parseResult.translate() should matchPattern {
-      case OldTranslationResult.Failure(_) =>
-    }
-  }
-
-  "A program with more than 1 predicate" should "translate as well" in {
-    val program =
-      """
-        |#permutation: permutation(+list, -permutations)
-        |member2([X|Xs],X,Xs).
-        |member2([X|Xs],E,[X|Ys]):-member2(Xs,E,Ys).
-        |permutation([],[]).
-        |permutation(Xs, [X | Ys]) :-
-        | member2(Xs,X,Zs),
-        | permutation(Zs, Ys).
-      """.stripMargin
-    val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
-    parseResult.translate() should matchPattern {
-      case PredicateTranslationResult.Success(_) =>
+  def correctProgramNonTranslatable(program: => String): Unit = {
+    it should "be parsed correctly" in {
+      val parseResult = parse(program, ParsingRules.program(_))
+      parseResult should matchPattern {
+        case Parsed.Success(_, _) =>
+      }
     }
 
-  }
-
-  "A program with more than 1 predicate and 2 directives" should "translate as well" in {
-    val program =
-      """
-        |#permutation: permutation(+list, -permutations)
-        |#member2: member2(+list,+elem,-listNoElem)
-        |member2([X|Xs],X,Xs).
-        |member2([X|Xs],E,[X|Ys]):-member2(Xs,E,Ys).
-        |permutation([],[]).
-        |permutation(Xs, [X | Ys]) :-
-        | member2(Xs,X,Zs),
-        | permutation(Zs, Ys).
-      """.stripMargin
-    val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
-    parseResult.translate() should matchPattern {
-      case PredicateTranslationResult.Success(_) =>
-    }
-  }
-
-  "A program with more than 1 predicate" should "not translate if the directive makes the other predicate invalid" in {
-    val program =
-      """
-        |#permutation: permutation(-list, +permutations)
-        |member2([X|Xs],X,Xs).
-        |member2([X|Xs],E,[X|Ys]):-member2(Xs,E,Ys).
-        |permutation([],[]).
-        |permutation(Xs, [X | Ys]) :-
-        | member2(Xs,X,Zs),
-        | permutation(Zs, Ys).
-      """.stripMargin
-    val Parsed.Success(parseResult, _) = parse(program, ParsingRules.program(_))
-    parseResult.translate() should matchPattern {
-      case OldTranslationResult.Failure(_) =>
+    it should "not be translated correctly" in {
+      val Parsed.Success(programTree, _) = parse(program, ParsingRules.program(_))
+      programTree.translate() should matchPattern {
+        case TranslationResult.Failure(_) =>
+      }
     }
   }
 }
 
-*/
+class TestProgramTranslation extends FlatSpec with Matchers with ProgramBehaviour {
+  TestPrograms.correctProgramsData foreach { programData =>
+    s"Correct program ${programData.programName}" should behave like correctProgram(programData)
+  }
+
+  "A correct program parsing result" should "match the expected tree" in {
+    val Parsed.Success(programTree, _) = parse(
+      TestPrograms.lookup.withDirective("lookupScala", "lookup", "+list", "-elem", "-position", "-listNoElem"),
+      ParsingRules.program(_)
+    )
+    programTree shouldEqual Program(
+      Seq(TranslationDirective("lookupScala", "lookup", Seq(
+        PredicateArgument("list", In),
+        PredicateArgument("elem", Out),
+        PredicateArgument("position", Out),
+        PredicateArgument("listNoElem", Out)
+      ))),
+      Map(
+        ("lookup", 4) -> Seq(
+          Clause(
+            Struct("lookup", Seq(
+              ListTerm(Seq(Variable("H")), Some(Variable("T"))),
+              Variable("H"),
+              Struct("zero", Seq()),
+              Variable("T")
+            )),
+            Seq()
+          ),
+          Clause(
+            Struct("lookup", Seq(
+              ListTerm(Seq(Variable("H")), Some(Variable("T"))),
+              Variable("E"),
+              Struct("s", Seq(Variable("N"))),
+              ListTerm(Seq(Variable("H")), Some(Variable("T2")))
+            )),
+            Seq(
+              Struct("lookup", Seq(
+                Variable("T"),
+                Variable("E"),
+                Variable("N"),
+                Variable("T2"))))))))
+  }
+  "A correct program, with invalid argument for translationDirective" should behave like correctProgramNonTranslatable(
+    TestPrograms.lookup.withDirective("lookup", "lookup", "-list", "+elem", "+position", "-listNoElem")
+  )
+  "A correct program, with valid argument for translationDirective, but that requires an invalid translation of other predicates" should behave like correctProgramNonTranslatable (
+    TestPrograms.permutation.withDirective("permutation", "permutation", "-list", "+permutations")
+  )
+}

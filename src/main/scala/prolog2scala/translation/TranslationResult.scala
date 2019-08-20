@@ -16,16 +16,8 @@ object TranslationResult {
   }
 
   implicit class TranslationSeq[A](base: Seq[A]) {
-    def translateMany[B](f: A => TranslationResult[B]): TranslationResult[Seq[B]] = {
-      //TODO rewrite in terms of translate many with context
-      def translateManyRec(elems: Seq[A]): TranslationResult[Seq[B]] = elems toList match {
-        case Nil => TranslationResult.Success(Nil)
-        case h :: t => f(h) flatMap (h2 =>
-          translateManyRec(t).map(t2 => h2 +: t2)
-        )
-      }
-      translateManyRec(base)
-    }
+    def translateMany[B](f: A => TranslationResult[B]): TranslationResult[Seq[B]] =
+      translateManyWithContext(null)((e, _) => f(e).map((_, null))).map(_._1)
 
     def translateManyWithContext[B, C](initialCtx: C)(f: (A, C) => TranslationResult[(B, C)]): TranslationResult[(Seq[B], C)] = {
       def translateManyWithContextRec(ctx: C, elems: Seq[A]): TranslationResult[(Seq[B], C)] = elems toList match {
@@ -36,8 +28,5 @@ object TranslationResult {
       }
       translateManyWithContextRec(initialCtx, base)
     }
-
-    def translateFold[B](startingValue: B)(f: (B, A) => TranslationResult[B]): TranslationResult[B] =
-      base.foldLeft[TranslationResult[B]](TranslationResult.Success(startingValue))((currValue, elem) => currValue.flatMap(f(_, elem)))
   }
 }
