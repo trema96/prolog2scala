@@ -1,8 +1,7 @@
 package prolog2scala.common
 
 object Implicits {
-  implicit class IteratorExtended[A](base: Iterator[A]) {
-    //TODO generalizzabile?
+  implicit class RichIterator[A](base: Iterator[A]) {
     /**
       * Take elements until the provided predicate is satisfied (includes the last element)
       * @param p a predicate
