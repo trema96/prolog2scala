@@ -8,60 +8,12 @@ import prolog2scala.translation.typing.ArgumentType._
 import prolog2scala.translation.typing.TypeData._
 import prolog2scala.translation.typing.Merge._
 import prolog2scala.translation.typing.DataMaps._
-
 import treehugger.forest._
 import treehuggerDSL._
-import definitions._
-
 
 object Typing {
   def typesOf(program: Program): TranslationResult[(Map[StructId, (Seq[Type], Seq[TypeDef])], Iterable[Tree])] = {
-    //TODO still needs refactor
-    (program.predicates.values.flatten toSeq) translateMany typesOfClause map (mergeMany(_)) map { typeData =>
-      val cleanPredicates = typeData.predicateTypes.foldLeft(typeData.predicateTypes)((predMap, currEntry) =>
-        currEntry._2.zipWithIndex.foldLeft(predMap)((argPredMap, currArg) => {
-          val currArgReplaced = currArg._1.replaceArguments(argPredMap, currEntry._1.name, currEntry._1.arity, currArg._2)
-          currArgReplaced._2 + (currEntry._1 -> currArgReplaced._2(currEntry._1).updated(currArg._2, currArgReplaced._1))
-        })
-      )
-      val typesEquivalences = EquivalenceGroups.empty merge cleanPredicates.values.flatMap(_.map(_.freeTypeEquivalences))
-      var traitMap: TraitMap = Map.empty
-      val predTypeMap: Map[StructId, Seq[DecidedArgumentType]] = cleanPredicates.map{ case (key, value) =>
-        (
-          key,
-          value.zipWithIndex.foldLeft[(Seq[DecidedArgumentType], FreeTypeMap)]((Seq.empty, Map.empty))((ctx, currTypes) => {
-            val ancestorData = currTypes._1.leastCommonAncestor(
-              ctx._2,
-              typesEquivalences,
-              typeData.structTypes,
-              traitMap,
-              program.translationDirectives collectFirst {
-                case TranslationDirective(scalaName, key.name, args) if args.length == key.arity => scalaName + "_" + args(currTypes._2).name
-              } getOrElse (key.name + "_" + key.arity + "_arg" + currTypes._2)
-            )
-            traitMap = ancestorData._3
-            (ctx._1 :+ ancestorData._1, ancestorData._2)
-          })._1
-        )
-      }
-      val cleanStructs = typeData.structTypes.map{case (key, value) => (key, value.map(_.replaceArguments(cleanPredicates)))}
-      val structTypeMap: Map[StructId, Seq[DecidedArgumentType]] = cleanStructs.map{ case (key, value) =>
-        (
-          key,
-          value.zipWithIndex.foldLeft[(Seq[DecidedArgumentType], FreeTypeMap)]((Seq.empty, Map.empty))((ctx, currTypes) => {
-            val ancestorData = currTypes._1.leastCommonAncestor(
-              ctx._2,
-              typesEquivalences,
-              typeData.structTypes,
-              traitMap,
-              key.name + "_" + key.arity + "_arg" + currTypes._2
-            )
-            traitMap = ancestorData._3
-            (ctx._1 :+ ancestorData._1, ancestorData._2)
-          })._1
-        )
-      }
-
+    decideProgramTypes(program) map { case (predTypeMap, structTypeMap, traitMap) =>
       val structDefs: Iterable[Tree] = structTypeMap map { case (struct, args) =>
         if (args nonEmpty) {
           CASECLASSDEF(Utils.structToScalaName(struct, structTypeMap.keys)) withParams
@@ -81,9 +33,65 @@ object Typing {
     }
   }
 
+  private def decideProgramTypes(program: Program): TranslationResult[(Map[StructId, Seq[DecidedArgumentType]], Map[StructId, Seq[DecidedArgumentType]], TraitMap)] = {
+    (program.predicates.values.flatten toSeq) translateMany typesOfClause map (mergeMany(_)) map { typeData =>
+      val cleanPredicates = typeData.predicateTypes.foldLeft(typeData.predicateTypes)((predMap, currEntry) =>
+        currEntry._2.zipWithIndex.foldLeft(predMap)((argPredMap, currArg) => {
+          val currArgReplaced = currArg._1.replaceArguments(argPredMap, currEntry._1.name, currEntry._1.arity, currArg._2)
+          currArgReplaced._2 + (currEntry._1 -> currArgReplaced._2(currEntry._1).updated(currArg._2, currArgReplaced._1))
+        })
+      )
+      val typesEquivalences = EquivalenceGroups.empty merge cleanPredicates.values.flatMap(_.map(_.freeTypeEquivalences))
+      val predicateDecidedTypeData =
+        decideTypes(
+          cleanPredicates,
+          typesEquivalences,
+          typeData.structTypes.keys,
+          Map.empty,
+          (structId, argIndex) =>
+            program.translationDirectives collectFirst {
+              case TranslationDirective(scalaName, structId.name, args) if args.length == structId.arity => scalaName + "_" + args(argIndex).name
+            } getOrElse (structId.name + "_" + structId.arity + "_arg" + argIndex)
+        )
+      val cleanStructs = typeData.structTypes.map { case (key, value) => (key, value.map(_.replaceArguments(cleanPredicates))) }
+      val structDecidedTypeData =
+        decideTypes(
+          cleanStructs,
+          typesEquivalences,
+          typeData.structTypes.keys,
+          predicateDecidedTypeData._2,
+          (structId, argIndex) => structId.name + "_" + structId.arity + "_arg" + argIndex
+        )
+
+      (predicateDecidedTypeData._1, structDecidedTypeData._1, structDecidedTypeData._2)
+    }
+  }
+
+  private def decideTypes(
+                           types: StructTypeMap,
+                           typeEquivalences: EquivalenceGroups[FreeType],
+                           allStructs: Iterable[StructId],
+                           traitMap: TraitMap,
+                           argumentNameGenerator: (StructId, Int) => String
+                         ): (Map[StructId, Seq[DecidedArgumentType]], TraitMap) =
+    types.foldLeft[(Map[StructId, Seq[DecidedArgumentType]], TraitMap)]((Map.empty, traitMap))((mapFoldResult, currEntry) => {
+      val valueTypeData =
+        currEntry._2.zipWithIndex.foldLeft[(Seq[DecidedArgumentType], FreeTypeMap, TraitMap)]((Seq.empty, Map.empty, mapFoldResult._2))((typesFoldResult, currTypes) => {
+          val ancestorData = currTypes._1.leastCommonAncestor(
+            typesFoldResult._2,
+            typeEquivalences,
+            allStructs,
+            typesFoldResult._3,
+            argumentNameGenerator(currEntry._1, currTypes._2)
+          )
+          (typesFoldResult._1 :+ ancestorData._1, ancestorData._2, ancestorData._3)
+        })
+      (mapFoldResult._1 + (currEntry._1 -> valueTypeData._1), valueTypeData._3)
+    })
+
   private def typesOfClause(clause: Clause): TranslationResult[ProgramTypeData] = {
     (clause.head +: clause.body.collect{case x: Struct => x}) translateMany typesOfPredicate map (mergeMany(_)) map { typeData =>
-      //TODO improve from here
+      //TODO improve here?
       var varMap = typeData.varTypes
       var nextToReplace = varMap.find(_._2.base exists (_.hasVariable))
 
@@ -92,7 +100,6 @@ object Typing {
         varMap = replaceResult._2 + (nextToReplace.get._1 -> replaceResult._1)
         nextToReplace = varMap.find(_._2.base exists (_.hasVariable))
       }
-      //TODO to here
 
       ProgramTypeData(
         typeData.predicateTypes map { case (key, value) =>

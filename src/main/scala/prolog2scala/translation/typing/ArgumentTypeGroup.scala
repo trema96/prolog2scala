@@ -15,6 +15,34 @@ class ArgumentTypeGroup private (val base: Set[ArgumentType]) {
   def replaceArguments(replaceMap: StructTypeMap): ArgumentTypeGroup = replaceArguments(replaceMap, Set())._1
   def freeTypeEquivalences: EquivalenceGroups[FreeType] =
     EquivalenceGroups.empty.union(base.collect{case x: FreeType => x}) merge base.collect{case ListType(types) => types.freeTypeEquivalences}
+  def leastCommonAncestor(
+                           freeTypeMap: FreeTypeMap,
+                           freeTypeEq: EquivalenceGroups[FreeType],
+                           allStructs: Iterable[StructId],
+                           traitMap: TraitMap,
+                           argName: String
+                         ): (DecidedArgumentType, FreeTypeMap, TraitMap) = {
+    require(base.nonEmpty, "leastCommonAncestor can be obtained only from a non-empty type set")
+
+    if (base.forall(_.isInstanceOf[FreeType])) {
+      val typeArg = getTypeArg(base.head.asInstanceOf[FreeType], freeTypeMap, freeTypeEq)
+      (typeArg._1, typeArg._2, traitMap)
+    } else {
+      val noFreeTypes = base.filter(!_.isInstanceOf[FreeType])
+      if (noFreeTypes.forall(_.isInstanceOf[StructType])) {
+        val structType = getStructType(noFreeTypes map (_.asInstanceOf[StructType]), allStructs, traitMap, argName)
+        (structType._1, freeTypeMap, structType._2)
+      } else if (noFreeTypes.forall(_.isInstanceOf[ListType])) {
+        val elemTypeData = (noFreeTypes collect {
+          case ListType(elemType) => elemType
+        }).fold(ArgumentTypeGroup.empty)(_ merge _).leastCommonAncestor(freeTypeMap, freeTypeEq, allStructs, traitMap, argName)
+
+        (DecidedArgumentType.ListType(elemTypeData._1), elemTypeData._2, elemTypeData._3)
+      } else {
+        (DecidedArgumentType.AnyType, freeTypeMap, Map.empty)
+      }
+    }
+  }
 
   private def replaceVariables(replaceMap: VarTypeMap, noReplace: Option[String]): (ArgumentTypeGroup, VarTypeMap) =
     base.foldLeft((ArgumentTypeGroup.empty, replaceMap))((updatedValues, current) => current match {
@@ -59,71 +87,36 @@ class ArgumentTypeGroup private (val base: Set[ArgumentType]) {
     if (res._1.base isEmpty) (ArgumentTypeGroup(FreeType.generateNew), res._2) else res
   }
 
-  def leastCommonAncestor(
-                           freeTypeMap: FreeTypeMap,
-                           freeTypeEq: EquivalenceGroups[FreeType],
-                           structTypeMap: StructTypeMap,
-                           traitMap: TraitMap,
-                           argName: String
-                         ): (DecidedArgumentType,FreeTypeMap, TraitMap) = {
-    require(base.nonEmpty, "leastCommonAncestor can be obtained only from a non-empty type set")
-    //TODO still needs improvement
-
-    if (base.forall(_.isInstanceOf[FreeType])) {
-      val groupRep = freeTypeEq.find(base.head.asInstanceOf[FreeType])
-      freeTypeMap get groupRep map {i =>
-        (DecidedArgumentType.TypeArg(i), freeTypeMap, traitMap)
-      } getOrElse {
-        val newIndex = freeTypeMap.getNextIndex
-        (
-          DecidedArgumentType.TypeArg(newIndex),
-          freeTypeMap  + (groupRep -> newIndex),
-          traitMap
-        )
-      }
-    } else {
-      val noFreeTypes = base.filter(!_.isInstanceOf[FreeType])
-      if (noFreeTypes.forall(_.isInstanceOf[StructType])) {
-        if (noFreeTypes.size == 1) {
-          val resTypeData = noFreeTypes.head.asInstanceOf[StructType]
-          (
-            DecidedArgumentType.StructType(Utils.structNameToScala(
-              if (structTypeMap.keys.count(_.name == resTypeData.structName) > 1) {
-                resTypeData.structName + "_" + resTypeData.structArgsCount
-              } else {
-                resTypeData.structName
-              }
-            )),
-            freeTypeMap,
-            traitMap
-          )
-        } else {
-          val structs = noFreeTypes.map(_.asInstanceOf[StructType])
-          traitMap get structs map { tp =>
-            (tp, freeTypeMap, traitMap)
-          } getOrElse {
-            val newType = DecidedArgumentType.GroupType(Utils.structNameToScala(argName))
-            (
-              newType,
-              freeTypeMap,
-              traitMap + (structs -> newType)
-            )
-          }
-        }
-      } else if (noFreeTypes.forall(_.isInstanceOf[ListType])) {
-        val elemTypeData = (noFreeTypes collect {
-          case ListType(elemType) => elemType
-        }).fold(ArgumentTypeGroup.empty)(_ merge _).leastCommonAncestor(freeTypeMap, freeTypeEq, structTypeMap, traitMap, argName)
-
-        (DecidedArgumentType.ListType(elemTypeData._1), elemTypeData._2, elemTypeData._3)
-      } else {
-        (DecidedArgumentType.AnyType, freeTypeMap, Map.empty)
-      }
+  private def getTypeArg(tp: FreeType, freeTypeMap: FreeTypeMap, freeTypeEq: EquivalenceGroups[FreeType]): (DecidedArgumentType.TypeArg,FreeTypeMap) = {
+    val groupRep = freeTypeEq.find(tp)
+    freeTypeMap get groupRep map {i =>
+      (DecidedArgumentType.TypeArg(i), freeTypeMap)
+    } getOrElse {
+      val newIndex = freeTypeMap.size
+      (
+        DecidedArgumentType.TypeArg(newIndex),
+        freeTypeMap  + (groupRep -> newIndex),
+      )
     }
   }
 
-  implicit class FreeTypeMapExt(base: FreeTypeMap) {
-    def getNextIndex: Int = base.size
+  private def getStructType(types: Set[StructType], allStructs: Iterable[StructId], traitMap: TraitMap, argName: String): (DecidedArgumentType, TraitMap) = {
+    if (types.size == 1) {
+      (
+        DecidedArgumentType.StructType(Utils.structToScalaName(StructId(types.head.structName, types.head.structArgsCount), allStructs)),
+        traitMap
+      )
+    } else {
+      traitMap get types map { tp =>
+        (tp, traitMap)
+      } getOrElse {
+        val newType = DecidedArgumentType.GroupType(Utils.structNameToScala(argName))
+        (
+          newType,
+          traitMap + (types -> newType)
+        )
+      }
+    }
   }
 }
 
