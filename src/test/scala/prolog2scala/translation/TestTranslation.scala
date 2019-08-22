@@ -25,8 +25,8 @@ trait ProgramBehaviour { this: FlatSpec with Matchers =>
 
     it should "match expected translation" in {
       val Parsed.Success(programTree, _) = parse(programData.program, ParsingRules.program(_))
-      val TranslationResult.Success(translationTree) = programTree.translate()
-      val actual = treehugger.forest.treeToString(translationTree).toCharArray.map(_.toInt).filter(_ != 13).map(_.toChar).mkString("")
+      val TranslationResult.Success(scalaCode) = programTree.translate()
+      val actual = scalaCode.toCharArray.map(_.toInt).filter(_ != 13).map(_.toChar).mkString("")
       val expected = programData.expectedTranslation
       actual shouldEqual expected
     }
@@ -67,7 +67,7 @@ class TestProgramTranslation extends FlatSpec with Matchers with ProgramBehaviou
         PredicateArgument("listNoElem", Out)
       ))),
       Map(
-        ("lookup", 4) -> Seq(
+        StructId("lookup", 4) -> Seq(
           Clause(
             Struct("lookup", Seq(
               ListTerm(Seq(Variable("H")), Some(Variable("T"))),

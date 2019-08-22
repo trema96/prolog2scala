@@ -9,7 +9,7 @@ import prolog2scala.translation._
 object ParsingRules {
   def program[_: P]: P[Program] = P(Start ~ translationDirective.rep(1) ~ clause.rep(1) ~ End) map {
     case (directives, clauses) => Program(directives,
-      clauses.groupBy(clause => (clause.head.name, clause.head.args.length))
+      clauses.groupBy(clause => StructId(clause.head.name, clause.head.args.length))
     )
   }
   def clause[_: P]: P[Clause] = P(struct ~ (":-" ~ termList).? ~ ".") map {

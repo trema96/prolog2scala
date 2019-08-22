@@ -28,5 +28,8 @@ object TranslationResult {
       }
       translateManyWithContextRec(initialCtx, base)
     }
+
+    def translateFold[B](initialVal: B)(f: (A, B) => TranslationResult[B]): TranslationResult[B] =
+      translateManyWithContext(initialVal)((a, b) => f(a, b) map ((null, _))) map (_._2)
   }
 }

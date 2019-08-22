@@ -11,7 +11,7 @@ import prolog2scala.translation.typing.DataMaps._
 import treehugger.forest._
 import treehuggerDSL._
 
-object Typing {
+object ProgramTyping {
   def typesOf(program: Program): TranslationResult[(Map[StructId, (Seq[Type], Seq[TypeDef])], Iterable[Tree])] = {
     decideProgramTypes(program) map { case (predTypeMap, structTypeMap, traitMap) =>
       val structDefs: Iterable[Tree] = structTypeMap map { case (struct, args) =>
