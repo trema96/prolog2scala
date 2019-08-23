@@ -1,7 +1,7 @@
 package prolog2scala.translation.typing
 
 import prolog2scala.translation.typing.ArgumentType.{FreeType, StructType}
-import prolog2scala.translation.{DecidedArgumentType, StructId}
+import prolog2scala.translation.StructId
 
 import scala.language.reflectiveCalls
 
@@ -13,7 +13,7 @@ object DataMaps {
 
   implicit class RichStructTypeMap(base: StructTypeMap) {
     def merge(other: StructTypeMap): StructTypeMap = mergeMap(base, other)((valA, valB) =>
-      valA zip valB map {case (a, b) => a merge b}
+      valA zip valB map {case (a, b) => a ++ b}
     )
   }
 
@@ -23,7 +23,7 @@ object DataMaps {
   type VarTypeMap = Map[String, ArgumentTypeGroup]
 
   implicit class RichVarTypeMap(base: VarTypeMap) {
-    def merge(other: VarTypeMap): VarTypeMap = mergeMap(base, other)((a, b) => a merge b)
+    def merge(other: VarTypeMap): VarTypeMap = mergeMap(base, other)((a, b) => a ++ b)
   }
 
   implicit class ManyVarTypeMap(base: Iterable[StructTypeMap]) {

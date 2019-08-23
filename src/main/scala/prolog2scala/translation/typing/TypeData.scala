@@ -2,6 +2,9 @@ package prolog2scala.translation.typing
 
 import DataMaps._
 
+/**
+  * Data necessary for program typing
+  */
 object TypeData {
   sealed trait BaseTypeData {
     val predicateTypes: StructTypeMap

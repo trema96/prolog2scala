@@ -1,10 +1,13 @@
-package prolog2scala.translation
+package prolog2scala.translation.typing
 
 import treehugger.forest._
 import definitions._
 import treehugger.forest
 import treehuggerDSL._
 
+/**
+  * Represent the final type for an argument
+  */
 sealed trait DecidedArgumentType {
   def treeType: Type
   def typeArg: Option[DecidedArgumentType.TypeArg]

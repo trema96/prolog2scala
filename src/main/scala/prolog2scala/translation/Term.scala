@@ -3,6 +3,9 @@ package prolog2scala.translation
 import prolog2scala.translation.Term.Variable
 
 sealed trait Term {
+  /**
+    * @return All variables contained in this term
+    */
   def variables: Set[Variable]
 }
 

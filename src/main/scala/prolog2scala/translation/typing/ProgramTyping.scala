@@ -12,6 +12,11 @@ import treehugger.forest._
 import treehuggerDSL._
 
 object ProgramTyping {
+  /**
+    * Tryes to infer best types for each of this program predicates and the necessary struct types
+    * @param program the program to analyze
+    * @return (a map containing the types for each predicate argument and its type arguments, all known struct classes and traits tree)
+    */
   def typesOf(program: Program): TranslationResult[(Map[StructId, (Seq[Type], Seq[TypeDef])], Iterable[Tree])] = {
     decideProgramTypes(program) map { case (predTypeMap, structTypeMap, traitMap) =>
       val structDefs: Iterable[Tree] = structTypeMap map { case (struct, args) =>
@@ -41,7 +46,7 @@ object ProgramTyping {
           currArgReplaced._2 + (currEntry._1 -> currArgReplaced._2(currEntry._1).updated(currArg._2, currArgReplaced._1))
         })
       )
-      val typesEquivalences = EquivalenceGroups.empty merge cleanPredicates.values.flatMap(_.map(_.freeTypeEquivalences))
+      val typesEquivalences = EquivalenceGroups.empty ++ cleanPredicates.values.flatMap(_.map(_.freeTypeEquivalences))
       val predicateDecidedTypeData =
         decideTypes(
           cleanPredicates,

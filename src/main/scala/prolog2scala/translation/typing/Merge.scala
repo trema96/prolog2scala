@@ -3,6 +3,9 @@ package prolog2scala.translation.typing
 import prolog2scala.translation.typing.DataMaps._
 import prolog2scala.translation.typing.TypeData._
 
+/**
+  * Utility for merging multiple elements
+  */
 object Merge {
   def mergeMany[A](elements: Iterable[A])(implicit mergeFunction: (A, A) => A, emptyElement: A): A = elements.fold(emptyElement)(mergeFunction)
 

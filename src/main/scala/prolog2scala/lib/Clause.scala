@@ -3,6 +3,11 @@ package prolog2scala.lib
 import prolog2scala.lib.Clause.Solution.{CutSolution, SimpleSolution}
 import prolog2scala.lib.Clause.Solution
 
+/**
+  * Represents the clause of a translated predicate
+  * @tparam A input type
+  * @tparam B output type
+  */
 sealed trait Clause[-A,+B] {
   def apply(arg: A): Solution[B]
 }

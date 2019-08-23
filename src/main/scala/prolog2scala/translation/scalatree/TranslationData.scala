@@ -5,6 +5,9 @@ import prolog2scala.translation.Term.Variable
 import treehugger.forest._
 import treehuggerDSL._
 
+/**
+  * Data object necessary for translation
+  */
 object TranslationData {
   type PredicateTranslationMap = Map[PredicateTranslationId, TranslatedPredicateData]
 

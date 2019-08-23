@@ -1,5 +1,8 @@
 package prolog2scala.lib
 
+/**
+  * Classes for representing cit predicate
+  */
 object Cut {
   case class CutResult[A](solutions: Stream[A], didCut: Boolean) {
     def ![B](other: A => Stream[B]): CutResult[B] = CutResult(solutions.take(1).flatMap(other), didCut)

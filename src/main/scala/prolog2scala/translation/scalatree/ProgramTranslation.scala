@@ -11,6 +11,12 @@ import prolog2scala.translation.scalatree.TypeDefinitions._
 import treehuggerDSL._
 
 object ProgramTranslation {
+  /**
+    * Translates a prolog program to the corresponding scala def trees
+    * @param program the program to translates
+    * @param predicateTypes the types of the program predicates
+    * @return the trees of the def representing the prolog program predicates
+    */
   def treeOf(program: Program, predicateTypes: Map[StructId, (Seq[Type], Seq[TypeDef])]): TranslationResult[Iterable[DefDef]] = {
     def translatePredicate(predicate: PredicateTranslationId, translationData: PredicateTranslationData): TranslationResult[PredicateTranslationData] = {
       if (translationData.knownPredicates.contains(predicate)) {

@@ -9,13 +9,12 @@ object Implicits {
       */
     def takeTo(p: A => Boolean): Iterator[A] = {
       new Iterator[A]{
-        private val baseIterator: Iterator[A] = base
         private var latest: Option[A] = None
 
-        override def hasNext: Boolean = latest.forall(!p(_)) && baseIterator.hasNext
+        override def hasNext: Boolean = latest.forall(!p(_)) && base.hasNext
 
         override def next(): A = {
-          val res: A = baseIterator.next()
+          val res: A = base.next()
           latest = Some(res)
           res
         }

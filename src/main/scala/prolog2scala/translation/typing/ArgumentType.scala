@@ -1,5 +1,8 @@
 package prolog2scala.translation.typing
 
+/**
+  * Represent an argument type inferred from its usage in the prolog program
+  */
 sealed trait ArgumentType {
   def hasVariable: Boolean
 }
