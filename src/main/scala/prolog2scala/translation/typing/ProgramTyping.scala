@@ -91,7 +91,6 @@ object ProgramTyping {
 
   private def typesOfClause(clause: Clause): TranslationResult[ProgramTypeData] = {
     (clause.head +: clause.body.collect{case x: Struct => x}) translateMany typesOfPredicate map (mergeMany(_)) map { typeData =>
-      //TODO improve here?
       var varMap = typeData.varTypes
       var nextToReplace = varMap.find(_._2.base exists (_.hasVariable))
 

@@ -7,7 +7,6 @@ import prolog2scala.translation.parsing.PrologWhitespace._
 import prolog2scala.translation.parsing.TermParser._
 
 object OperationParser {
-  //TODO riprovare a generalizzare
   def operation[_: P]: P[Term] = compare
 
   private def operand[_: P]: P[Term] = P(termNoOp | ("(" ~ compare ~ ")"))
