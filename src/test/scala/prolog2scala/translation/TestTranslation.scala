@@ -10,21 +10,20 @@ import prolog2scala.translation.TestPrograms.{ProgramData, ProgramString}
 trait ProgramBehaviour { this: FlatSpec with Matchers =>
   def correctProgram(programData: => ProgramData) {
     it should "be parsed correctly" in {
-      val parseResult = parse(programData.program, ParsingRules.program(_))
-      parseResult should matchPattern {
+      Program.parse(programData.program) should matchPattern {
         case Parsed.Success(_, _) =>
       }
     }
 
     it should "be translated correctly" in {
-      val Parsed.Success(programTree, _) = parse(programData.program, ParsingRules.program(_))
+      val Parsed.Success(programTree, _) = Program.parse(programData.program)
       programTree.translate() should matchPattern {
         case TranslationResult.Success(_) =>
       }
     }
 
     it should "match expected translation" in {
-      val Parsed.Success(programTree, _) = parse(programData.program, ParsingRules.program(_))
+      val Parsed.Success(programTree, _) = Program.parse(programData.program)
       val TranslationResult.Success(scalaCode) = programTree.translate()
       val actual = scalaCode.toCharArray.map(_.toInt).filter(_ != 13).map(_.toChar).mkString("")
       val expected = programData.expectedTranslation
@@ -34,14 +33,13 @@ trait ProgramBehaviour { this: FlatSpec with Matchers =>
 
   def correctProgramNonTranslatable(program: => String): Unit = {
     it should "be parsed correctly" in {
-      val parseResult = parse(program, ParsingRules.program(_))
-      parseResult should matchPattern {
+      Program.parse(program) should matchPattern {
         case Parsed.Success(_, _) =>
       }
     }
 
     it should "not be translated correctly" in {
-      val Parsed.Success(programTree, _) = parse(program, ParsingRules.program(_))
+      val Parsed.Success(programTree, _) = Program.parse(program)
       programTree.translate() should matchPattern {
         case TranslationResult.Failure(_) =>
       }

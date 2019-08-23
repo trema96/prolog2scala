@@ -1,5 +1,6 @@
 package prolog2scala.translation
 
+import prolog2scala.translation.parsing.ParsingRules
 import prolog2scala.translation.scalatree.ProgramTranslation
 import prolog2scala.translation.typing.ProgramTyping
 import treehugger.forest._
@@ -12,4 +13,9 @@ case class Program(translationDirectives: Seq[TranslationDirective], predicates:
         OBJECTDEF(scalaModuleName) := BLOCK(typeData._2 ++ predicateDefs)
       }
     } map (treeToString(_))
+}
+
+object Program {
+  def parse(programString: String): fastparse.Parsed[Program] =
+    fastparse.parse(programString, ParsingRules.program(_))
 }
