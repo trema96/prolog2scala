@@ -35,90 +35,32 @@ object TestPrograms {
     ProgramData(
       "lookup",
       lookup.withDirective("lookup", "lookup", "+list", "-elem", "+position", "-listNoElem"),
-      """|object TranslatedProgram {
-         |  trait Lookup_position
-         |  case class S(arg0: Lookup_position) extends Lookup_position
-         |  case object Zero extends Lookup_position
-         |  def lookup[A1](list: List[A1], position: Lookup_position): Stream[(A1, List[A1])] = Predicate[(List[A1], Lookup_position), (A1, List[A1])](Fact({
-         |    case (h :: t, Zero) => (h, t)
-         |  }), Rule({
-         |    case (h :: t, S(n)) => for ((e, t2) <- lookup(t, n))
-         |      yield (e, List(h) ++ t2)
-         |  }))(list, position)
-         |}""".stripMargin
+      List(
+        ("lookup(List(1,2,3,4), S(S(Zero))) toList", "List((3, List(1,2,4)))"),
+        ("lookup(List(1,2,3,4), Zero) toList", "List((1, List(2,3,4)))")
+      )
     ),
     ProgramData(
       "permutation",
       permutation.withDirective("permutation", "permutation", "+list", "-permutations"),
-      """|object TranslatedProgram {
-         |  def permutation[A1](list: List[A1]): Stream[List[A1]] = Predicate[List[A1], List[A1]](Fact({
-         |    case Nil => List()
-         |  }), Rule({
-         |    case xs => for {
-         |      (x, zs) <- member2_ioo(xs)
-         |      ys <- permutation(zs)
-         |    } yield List(x) ++ ys
-         |  }))(list)
-         |  private def member2_ioo[A1](arg0: List[A1]): Stream[(A1, List[A1])] = Predicate[List[A1], (A1, List[A1])](Fact({
-         |    case x :: xs => (x, xs)
-         |  }), Rule({
-         |    case x :: xs => for ((e, ys) <- member2_ioo(xs))
-         |      yield (e, List(x) ++ ys)
-         |  }))(arg0)
-         |}""".stripMargin
+      List(
+        ("permutation(List(1,2,3)) toSet", "Set(List(1,2,3), List(1,3,2), List(2,1,3), List(2,3,1), List(3,1,2), List(3,2,1))"),
+        ("permutation(List()) toList", "List(List())")
+      )
     ),
     ProgramData(
       "father",
       father
         .withDirective("sonOf", "son", "-personA", "+personB")
         .withDirective("grandfatherOf", "grandfather", "-personA", "+personB"),
-      """|object TranslatedProgram {
-         |  trait Father_2_arg0
-         |  case object Abraham extends Father_2_arg0
-         |  case object Terach extends Father_2_arg0
-         |  case object Nachor extends Father_2_arg0
-         |  case object Isaac extends Father_2_arg0
-         |  private def father_io(arg0: Father_2_arg0): Stream[Father_2_arg0] = Predicate[Father_2_arg0, Father_2_arg0](Fact({
-         |    case Abraham => Isaac
-         |  }), Fact({
-         |    case Terach => Nachor
-         |  }), Fact({
-         |    case Terach => Abraham
-         |  }))(arg0)
-         |  private def father_ii(arg0: Father_2_arg0, arg1: Father_2_arg0): Stream[Unit] = Predicate[(Father_2_arg0, Father_2_arg0), Unit](Fact({
-         |    case (Abraham, Isaac) => ()
-         |  }), Fact({
-         |    case (Terach, Nachor) => ()
-         |  }), Fact({
-         |    case (Terach, Abraham) => ()
-         |  }))(arg0, arg1)
-         |  def grandfatherOf(personB: Father_2_arg0): Stream[Father_2_arg0] = Predicate[Father_2_arg0, Father_2_arg0](Rule({
-         |    case z => for {
-         |      (x, y) <- father_oo()
-         |      () <- father_ii(y, z)
-         |    } yield x
-         |  }))(personB)
-         |  private def male_i(arg0: Father_2_arg0): Stream[Unit] = Predicate[Father_2_arg0, Unit](Fact({
-         |    case Isaac => ()
-         |  }))(arg0)
-         |  def sonOf(personB: Father_2_arg0): Stream[Father_2_arg0] = Predicate[Father_2_arg0, Father_2_arg0](Rule({
-         |    case y => for {
-         |      x <- father_io(y)
-         |      () <- male_i(x)
-         |    } yield x
-         |  }))(personB)
-         |  private def father_oo(): Stream[(Father_2_arg0, Father_2_arg0)] = Predicate[Unit, (Father_2_arg0, Father_2_arg0)](Fact({
-         |    case _ => (Abraham, Isaac)
-         |  }), Fact({
-         |    case _ => (Terach, Nachor)
-         |  }), Fact({
-         |    case _ => (Terach, Abraham)
-         |  }))()
-         |}""".stripMargin
-    ),
+      List(
+        ("grandfatherOf(Isaac) toList", "List(Terach)"),
+        ("sonOf(Abraham) toList", "List(Isaac)")
+      )
+    )
   )
 
-  case class ProgramData(programName: String, program: String, expectedTranslation: String)
+  case class ProgramData(programName: String, program: String, tests: Seq[(String, String)])
 
   implicit class ProgramString(base: String) {
     def withDirective(scalaName: String, predName: String, args: String*): String =

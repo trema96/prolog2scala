@@ -7,6 +7,9 @@ import prolog2scala.translation.PredicateArgument.Direction.{In, Out}
 import prolog2scala.translation.Term._
 import prolog2scala.translation.TestPrograms.{ProgramData, ProgramString}
 
+import scala.reflect.runtime.universe._
+import scala.tools.reflect.ToolBox
+
 trait ProgramBehaviour { this: FlatSpec with Matchers =>
   def correctProgram(programData: => ProgramData) {
     it should "be parsed correctly" in {
@@ -22,12 +25,14 @@ trait ProgramBehaviour { this: FlatSpec with Matchers =>
       }
     }
 
-    it should "match expected translation" in {
+    it should "translate to a program working the expected way" in {
       val Parsed.Success(programTree, _) = Program.parse(programData.program)
       val TranslationResult.Success(scalaCode) = programTree.translate()
-      val actual = scalaCode.toCharArray.map(_.toInt).filter(_ != 13).map(_.toChar).mkString("")
-      val expected = programData.expectedTranslation
-      actual shouldEqual expected
+      val tb = runtimeMirror(getClass.getClassLoader).mkToolBox()
+      val codeTestResult: Option[String] = tb.compile(
+        tb.parse(ReflectiveTestHelper.prepareCode(scalaCode, programData.tests))
+      )().asInstanceOf[Option[String]]
+      assert(codeTestResult.isEmpty)
     }
   }
 

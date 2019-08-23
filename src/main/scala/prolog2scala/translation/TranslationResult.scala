@@ -1,7 +1,5 @@
 package prolog2scala.translation
 
-import prolog2scala.lib.Implicits._
-
 sealed trait TranslationResult[+A] {
   def flatMap[B](f: A => TranslationResult[B]): TranslationResult[B]
   def map[B](f: A => B): TranslationResult[B] = flatMap(x => TranslationResult.Success(f(x)))
