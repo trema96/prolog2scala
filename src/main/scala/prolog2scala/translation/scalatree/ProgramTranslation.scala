@@ -7,6 +7,7 @@ import prolog2scala.translation.Term._
 import prolog2scala.translation.TreeHuggerUtils._
 import treehugger.forest
 import forest._
+import prolog2scala.translation.scalatree.TypeDefinitions._
 import treehuggerDSL._
 
 object ProgramTranslation {
@@ -26,7 +27,7 @@ object ProgramTranslation {
         ) map {case (translatedClauses, newPredicates) =>
           newPredicates addPredicate  (predicate -> TranslatedPredicateData(
             signatureData.name,
-            signatureData.tree := (TYPE_REF("Predicate") TYPE_OF (flattenedTypeTuple(signatureData.typeParams), signatureData.returnType) APPLY translatedClauses APPLY (signatureData.paramNames map (REF(_))))
+            signatureData.tree := (PREDICATE(flattenedTypeTuple(signatureData.typeParams), signatureData.returnType) APPLY translatedClauses APPLY (signatureData.paramNames map (REF(_))))
           ))
         }
       }
@@ -56,7 +57,7 @@ object ProgramTranslation {
 
       val returnType: Type = flattenedTypeTuple(predicate.arguments filterOutputArgumentsIn thisPredicateTypes._1)
 
-      val defSignature = DEF(name, TYPE_REF("Stream") TYPE_OF returnType) withParams params withTypeParams thisPredicateTypes._2
+      val defSignature = DEF(name, TYPE_STREAM(returnType)) withParams params withTypeParams thisPredicateTypes._2
 
       PredicateSignatureData(
         name,
@@ -89,9 +90,9 @@ object ProgramTranslation {
 
               (
                 if (translatedTerms isEmpty) {
-                  REF("Fact") APPLY BLOCK (inputCase ==> outputResult)
+                  FACT (inputCase ==> outputResult)
                 } else {
-                  REF("Rule") APPLY BLOCK (
+                  RULE (
                     inputCase ==> (FOR(
                       translatedTerms collect {
                         case ClauseTermTranslation.ForElement(node) => node
@@ -143,9 +144,9 @@ object ProgramTranslation {
       case Struct(name, Nil) => TranslationResult.Success(REF(Utils.structNameToScala(name)))
       case Struct(name, args) => args.translateMany(argToScala) map (REF(Utils.structNameToScala(name)) APPLY _)
       case Variable(name) => TranslationResult.Success(REF(Utils.varNameToScala(name)))
-      case ListTerm(values, None) => values.translateMany(argToScala) map (TYPE_REF("List") APPLY _)
+      case ListTerm(values, None) => values.translateMany(argToScala) map (LIST(_))
       case ListTerm(values, Some(tail)) => argToScala(tail) flatMap (translatedTail =>
-        values.translateMany(argToScala) map (REF("List") APPLY _ INFIX "++" APPLY translatedTail)
+        values.translateMany(argToScala) map (LIST(_) INFIX "++" APPLY translatedTail)
         )
       case _ => TranslationResult.Failure("Can't use term " + term + " as an argument")
     }
@@ -154,7 +155,7 @@ object ProgramTranslation {
       case Struct(name, Nil) => TranslationResult.Success(REF(Utils.structNameToScala(name)))
       case Struct(name, args) => args.translateMany(argToScalaPattern(_, knownVariables)) map (REF(Utils.structNameToScala(name)) APPLY _)
       case Variable(name) => TranslationResult.Success(if (knownVariables contains Variable(name)) BACKQUOTED(Utils.varNameToScala(name)) else ID(Utils.varNameToScala(name)))
-      case ListTerm(Nil, None) => TranslationResult.Success(REF("Nil"))
+      case ListTerm(Nil, None) => TranslationResult.Success(NIL)
       case ListTerm(values, None) => values.translateMany(argToScalaPattern(_, knownVariables)) map (INFIX_CHAIN("::", _))
       case ListTerm(values, Some(tail)) => argToScalaPattern(tail, knownVariables) flatMap (translatedTail =>
           values.translateMany(argToScalaPattern(_, knownVariables)) map (INFIX_CHAIN("::", _) UNLIST_:: translatedTail)

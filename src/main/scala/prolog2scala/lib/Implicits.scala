@@ -1,4 +1,4 @@
-package prolog2scala.common
+package prolog2scala.lib
 
 object Implicits {
   implicit class RichIterator[A](base: Iterator[A]) {
